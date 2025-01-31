@@ -4,6 +4,10 @@ from app.spotify_api import get_top_artists
 
 app = FastAPI()
 
+templates = Jinja2Templates(directory="app/templates")
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
 @app.get("/")
 def root():
     return {"message": "Welcome to Spotify Stats API!"}
