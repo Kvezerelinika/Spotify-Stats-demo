@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Dashboard - Spotify Stats
+{% endblock %}
+
+{% block main %}
+    <h2>Your Top Spotify Artists</h2>
+    {% if top_artists %}
+        <ul>
+            {% for artist in top_artists %}
+                <li>{{ artist.name }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No data available. Please log in with Spotify to fetch your data.</p>
+    {% endif %}
+{% endblock %}
