@@ -3,27 +3,34 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
-from app.oauth import get_spotify_token, get_spotify_login_url, get_spotify_token, handle_spotify_callback, exchange_code_for_token
-from app.spotify_api import get_top_artists
-import requests
+from collections import Counter
 
+# Import Spotify helper functions
+from app.oauth import get_spotify_token, get_spotify_login_url, exchange_code_for_token
+from app.spotify_api import get_top_artists, get_recently_played_tracks
 
+# Initialize FastAPI only once
 app = FastAPI()
 
-# Set up session middleware to manage sessions
-app.add_middleware(SessionMiddleware, secret_key="39e52e320acd494bb03a418878fa7dfe")
+# ✅ Session Middleware (Make sure secret_key is correctly set)
+app.add_middleware(SessionMiddleware, secret_key="your_super_secret_key", session_cookie="spotify_session")
 
-# Set up Jinja2 templates
-templates = Jinja2Templates(directory="app/templates")
+# ✅ Setup Jinja2 Templates
+templates = Jinja2Templates(directory="app/templates") 
 
-# Serve static files (CSS, JS, images)
+# ✅ Serve static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# ---------------------------------------
+# 🎵 1️⃣ Spotify Login & Auth Flow
+# ---------------------------------------
 
 @app.get("/")
 def root(request: Request, token: str = Depends(get_spotify_token)):
-    """
-    Fetch top artists from Spotify and display on homepage.
-    """
+    """Fetch top artists from Spotify and display on homepage."""
+    if not token:
+        return RedirectResponse("/login")
+
     top_artists = get_top_artists(token)  # Fetch data from Spotify API
     return templates.TemplateResponse("index.html", {"request": request, "top_artists": top_artists})
 
@@ -33,43 +40,84 @@ def login_page(request: Request):
 
 @app.get("/login")
 def login():
-    # Redirect to Spotify's login URL
-    return RedirectResponse(get_spotify_login_url()) 
+    """Redirect user to Spotify's OAuth login."""
+    return RedirectResponse(get_spotify_login_url())
 
 @app.get("/callback")
 async def callback(request: Request, code: str = None):
-    """
-    Handle Spotify callback and get the access token.
-    """
+    """Handle Spotify OAuth callback."""
     if not code:
-        return {"error": "Code is missing in the callback URL. Make sure Spotify is redirecting properly."}
-    
+        return {"error": "Code is missing in the callback URL."}
+
     try:
         # Exchange the code for an access token
         token_data = exchange_code_for_token(code)
         access_token = token_data.get("access_token")
-        refresh_token = token_data.get("refresh_token")  # Optional, you can save this to refresh the token later
 
-        # Store the token in a session or database
+        # ✅ Store token in session
         request.session["spotify_token"] = access_token
-        
-        # Redirect to the dashboard or any other page
+
+        # Redirect to dashboard
         return RedirectResponse(url="/dashboard")
 
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/dashboard")
-def dashboard(request: Request, token: str = Depends(get_spotify_token)):
-    top_artists = get_top_artists(token)
-    print(top_artists)  # Debug: Check if top_artists data is being fetched
-    return templates.TemplateResponse("dashboard.html", {"request": request, "top_artists": top_artists})
+# ---------------------------------------
+# 🎵 2️⃣ Fetch & Display Spotify Data
+# ---------------------------------------
 
+@app.get("/dashboard")
+async def dashboard(request: Request):
+    """Render the dashboard page with top artists & recently played tracks."""
+    
+    # Fetch the Spotify token from session
+    token = request.session.get("spotify_token")
+    
+    if not token:
+        return RedirectResponse(url="/login")  # Redirect to login if token is missing
+
+    # Fetch recently played tracks using the token
+    recently_played_data = get_recently_played_tracks(token)  # Pass token to the function
+    
+    # Debug print to inspect the structure of the response
+    print("Recently Played Data:", recently_played_data)
+    
+    # Check if 'items' exists in the data and extract the list of tracks
+    recently_played = recently_played_data.get("items", [])
+    top_artists = get_top_artists(token)
+
+    for index, artist in enumerate(top_artists['items'], start=1):
+        print(f"{index}. {artist['name']} - {artist['external_urls']['spotify']}")
+    
+    if not recently_played:
+        return {"error": "No recently played tracks found."}
+
+    # Ensure 'recently_played' is a list of dictionaries
+    if isinstance(recently_played, list) and all(isinstance(track, dict) for track in recently_played):
+        # Count occurrences of each track ID
+        play_counts = Counter(track["track"]["id"] for track in recently_played)
+
+        # Add the play count to each track in the recently played list
+        for track in recently_played:
+            track["play_count"] = play_counts[track["track"]["id"]]
+
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {"request": request, "recently_played": recently_played, "top_artists": top_artists}
+        )
+    else:
+        # If the data is not in the expected format, return an error message
+        return {"error": "Unexpected data format for recently played tracks"}
 
 @app.get("/api/top-artists")
-def top_artists(request: Request):
+def api_top_artists(request: Request):
+    """API Endpoint: Fetch user's top artists."""
     token = request.session.get("spotify_token")
+
     if not token:
         return {"error": "User not logged in"}
-    
-    return get_top_artists(token)
+
+    top_artists = get_top_artists(token)  # ✅ Define variable before printing
+    print("Top Artists:", top_artists)  # Debugging
+    return top_artists

@@ -5,14 +5,49 @@
 {% endblock %}
 
 {% block main %}
-    <h2>Your Top Spotify Artists</h2>
-    {% if top_artists %}
+    <h2>Your Top Artists</h2>
+    {% if top_artists and "items" in top_artists %}
         <ul>
-            {% for artist in top_artists %}
-                <li>{{ artist.name }}</li>
-            {% endfor %}
+        {% for artist in top_artists["items"] %}
+            <li>{{ artist.name }}</li>
+        {% endfor %}
         </ul>
     {% else %}
-        <p>No data available. Please log in with Spotify to fetch your data.</p>
+        <p>No data available. Try logging in with Spotify.</p>
     {% endif %}
+
+    <h2>Recently Played Tracks</h2>
+    {% if recently_played %}
+        <ul>
+        {% for track in recently_played["items"] %}
+            <li>
+                <strong>{{ track.track.name }}</strong> by 
+                {% for artist in track.track.artists %}
+                    {{ artist.name }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No recent tracks found. Try playing some music on Spotify.</p>
+    {% endif %}
+
+    <h2>Your Recently Played Songs</h2>
+    {% if recently_played %}
+        <ul>
+        {% for track in recently_played %}
+            <li>
+                <strong>{{ track.track.name }}</strong> by
+                {% for artist in track.track.artists %}
+                    {{ artist.name }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+                <br>
+                Played {{ track.play_count }} times
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No recent tracks found. Try playing some music on Spotify.</p>
+    {% endif %}
+    
 {% endblock %}

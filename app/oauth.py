@@ -15,9 +15,8 @@ SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/callback" # Correctly loaded from 
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SCOPES = "user-top-read user-read-recently-played"
 
-def get_spotify_token():
-    auth_url = f"https://accounts.spotify.com/authorize?client_id={SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri={SPOTIFY_REDIRECT_URI}&scope={SCOPES}"
-    return auth_url
+def get_spotify_token(request: Request):
+    return request.session.get("spotify_token")
 
 def exchange_code_for_token(code: str):
     response = requests.post(SPOTIFY_TOKEN_URL, data={

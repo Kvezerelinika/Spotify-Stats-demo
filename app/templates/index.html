@@ -20,22 +20,6 @@
   </div>
 </nav>
 
-<h2 class="mt-4">Your Top Artists</h2>
-
-{% if top_artists %}
-    <ul class="list-group mt-3">
-        {% for artist in top_artists %}
-            <li class="list-group-item d-flex align-items-center">
-                <img src="{{ artist.image }}" alt="{{ artist.name }}" class="rounded-circle me-3" width="50">
-                <span>{{ artist.name }}</span>
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No data available. Try logging in with Spotify.</p>
-{% endif %}
-
-
 <h2>Your Top Artists</h2>
 {% if top_artists and "items" in top_artists %}
     <ul>
