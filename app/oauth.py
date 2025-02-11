@@ -4,6 +4,7 @@ from fastapi.responses import RedirectResponse
 from fastapi import Request
 from urllib.parse import urlencode
 from dotenv import load_dotenv
+from fastapi import Request, HTTPException, status
 
 load_dotenv()
 
@@ -79,3 +80,11 @@ def exchange_code_for_token(code: str):
         raise Exception(f"Error fetching access token: {response.status_code}, {response.text}")
     
     return response.json()
+
+
+def get_user_id_from_session(request: Request):
+
+    user_id = request.session.get("user_id")  # Assuming you're using session for user authentication
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return user_id
