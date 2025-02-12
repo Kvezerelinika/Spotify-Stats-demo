@@ -5,6 +5,7 @@ from fastapi import Request
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from fastapi import Request, HTTPException, status
+from app.database import get_db_connection
 
 load_dotenv()
 
@@ -34,23 +35,40 @@ def handle_spotify_callback(request: Request):
     if not code:
         return {"error": "Authorization failed"}
 
-    token_url = "https://accounts.spotify.com/api/token"
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": SPOTIFY_REDIRECT_URI,
-        "client_id": SPOTIFY_CLIENT_ID,
-        "client_secret": SPOTIFY_CLIENT_SECRET,
-    }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    # Step 1: Get the access token
+    token_info = exchange_code_for_token(code)
 
-    response = requests.post(token_url, data=data, headers=headers)
-    token_info = response.json()
-
-    if "access_token" in token_info:
-        return {"access_token": token_info["access_token"]}
-    else:
+    if "access_token" not in token_info:
         return {"error": "Failed to get access token"}
+
+    access_token = token_info["access_token"]
+
+    # Step 2: Fetch user data (including user ID) using the access token
+    headers = {"Authorization": f"Bearer {access_token}"}
+    user_response = requests.get("https://api.spotify.com/v1/me", headers=headers)
+    
+    if user_response.status_code != 200:
+        raise HTTPException(status_code=user_response.status_code, detail="Failed to fetch user data from Spotify")
+
+    # Parse the user data
+    user_data = user_response.json()
+
+    # Get the user ID from the response
+    spotify_user_id = user_data["id"]  # Spotify's user ID
+    print(f"\n Spotify User ID: {spotify_user_id} \n")
+    
+    # You can also get additional details, like the user's display name
+    display_name = user_data.get("display_name", "Unknown")
+
+    # Step 3: Store the user ID and token in the session (or wherever you need it)
+    request.session["user_id"] = spotify_user_id  # Store Spotify User ID
+    request.session["access_token"] = access_token  # Optionally store the token for future requests
+
+    return {
+        "user_id": spotify_user_id,
+        "display_name": display_name,
+        "access_token": access_token
+    }
     
 def get_spotify_login_url():
     params = {
@@ -88,3 +106,39 @@ def get_user_id_from_session(request: Request):
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return user_id
+
+
+def user_info_to_database(user_profile):
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    try:
+        info_users = []
+        if isinstance(user_profile, dict):  # Check if the data is a dictionary
+            id = user_profile.get("id")
+            username = user_profile.get("display_name")
+            email = user_profile.get("email")
+
+            info_users.append((id, username, email))
+
+            if info_users:
+                print("User Info to Insert: ", info_users)  # Debugging before inserting into DB
+                cursor.executemany(
+                    "INSERT INTO users (id, username, email) VALUES (%s, %s, %s)  "
+                    "ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, username = EXCLUDED.username", 
+                    info_users
+                )
+            else: 
+                print("No user data to insert.")
+            db.commit()
+        else:
+            print("Error: user_profile is not a dictionary")
+
+    except Exception as e:
+        print(f"Database insertion error: {e}")
+        db.rollback()
+    
+    finally:
+        cursor.close()
+        db.close()
+

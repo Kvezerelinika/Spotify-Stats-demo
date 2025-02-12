@@ -6,8 +6,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from collections import Counter
 
 # Import Spotify helper functions
-from app.oauth import get_spotify_token, get_spotify_login_url, exchange_code_for_token
-from app.spotify_api import get_top_artists, get_recently_played_tracks
+from app.oauth import get_spotify_token, get_spotify_login_url, exchange_code_for_token, user_info_to_database
+from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile
 
 # Initialize FastAPI only once
 app = FastAPI()
@@ -73,32 +73,44 @@ async def dashboard(request: Request):
     
     # Fetch the Spotify token from session
     token = request.session.get("spotify_token")
+    user_id = request.session.get("user_id")
     
     if not token:
         return RedirectResponse(url="/login")  # Redirect to login if token is missing
 
-    # Fetch recently played tracks using the token
-    recently_played_data = get_recently_played_tracks(token)  # Pass token to the function
-    
-    # Debug print to inspect the structure of the response
-    print("Recently Played Data:", recently_played_data)
-    
-    # Check if 'items' exists in the data and extract the list of tracks
-    recently_played = recently_played_data.get("items", [])
-    top_artists = get_top_artists(token)
+    # Fetch user info from Spotify API (using token)
+    if not user_id:
+        user_profile = get_spotify_user_profile(token)
+        if user_profile:
+            print("User Profile:", user_profile)  # Debugging the user profile response
+            user_id = user_profile["id"]  # Assign the user ID from the profile to session
+            request.session["user_id"] = user_id  # Store user ID in session
+        
+            # Insert user info into database
+            get_user = user_info_to_database(user_profile)  # Pass user_profile (make sure it's a dictionary)
+        else:
+            print("Error: No user profile data")
 
-    for index, artist in enumerate(top_artists['items'], start=1):
-        print(f"{index}. {artist['name']} - {artist['external_urls']['spotify']}")
+    
+    # Print user info if available
+    if get_user is not None:
+        print("User Info: ", get_user)  # This should now print user info or a meaningful message
+    else:
+        print("No user data available.")
+    
+    # Fetch recently played tracks and top artists
+    recently_played_data = get_recently_played_tracks(token)
+    top_artists = get_top_artists(token)
+    
+    recently_played = recently_played_data.get("items", [])
     
     if not recently_played:
         return {"error": "No recently played tracks found."}
 
-    # Ensure 'recently_played' is a list of dictionaries
+    # Count occurrences of each track ID
     if isinstance(recently_played, list) and all(isinstance(track, dict) for track in recently_played):
-        # Count occurrences of each track ID
         play_counts = Counter(track["track"]["id"] for track in recently_played)
-
-        # Add the play count to each track in the recently played list
+        
         for track in recently_played:
             track["play_count"] = play_counts[track["track"]["id"]]
 
@@ -107,17 +119,4 @@ async def dashboard(request: Request):
             {"request": request, "recently_played": recently_played, "top_artists": top_artists}
         )
     else:
-        # If the data is not in the expected format, return an error message
         return {"error": "Unexpected data format for recently played tracks"}
-
-@app.get("/api/top-artists")
-def api_top_artists(request: Request):
-    """API Endpoint: Fetch user's top artists."""
-    token = request.session.get("spotify_token")
-
-    if not token:
-        return {"error": "User not logged in"}
-
-    top_artists = get_top_artists(token)  # ✅ Define variable before printing
-    print("Top Artists:", top_artists)  # Debugging
-    return top_artists
