@@ -1,25 +1,29 @@
-import requests
+import requests, httpx
+from fastapi import HTTPException
 
 SPOTIFY_API_URL = "https://api.spotify.com/v1"
 
-def get_top_artists(token):
+async def get_top_artists(token):
     headers = {"Authorization": f"Bearer {token}"}
     url = "https://api.spotify.com/v1/me/top/artists?time_range=long_term&limit=50"
-    response = requests.get(url, headers=headers)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
     
     if response.status_code != 200:
-        raise Exception(f"Failed to fetch data from Spotify. Status code: {response.status_code}")
+        raise HTTPException(status_code=response.status_code, detail=f"Error fetching recently top artists: {response.text}")
     
     return response.json()
 
-def get_recently_played_tracks(token: str):
+async def get_recently_played_tracks(token: str):
     url = "https://api.spotify.com/v1/me/player/recently-played?limit=50"
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        return response.json()
-    return {"error": response.json()}
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+    
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=f"Error fetching recently played tracks: {response.text}")
+    
+    return response.json()
 
 def get_top_tracks(token: str):
     url = "https://api.spotify.com/v1/me/top/tracks?time_range=long_term&limit=50"

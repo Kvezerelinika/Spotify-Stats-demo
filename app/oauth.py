@@ -1,34 +1,129 @@
-import requests
-import os
-from fastapi.responses import RedirectResponse
-from fastapi import Request
+import requests, os, time, httpx
 from urllib.parse import urlencode
 from dotenv import load_dotenv
-from fastapi import Request, HTTPException, status
 from app.database import get_db_connection
 
+from fastapi.responses import RedirectResponse
+from fastapi import Request, HTTPException, status, FastAPI, Depends
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import JSONResponse
+from fastapi_sessions.backends.implementations import InMemoryBackend
+from fastapi_sessions.session_verifier import SessionVerifier
+from starlette.requests import Request
+
+from fastapi.responses import JSONResponse
+
 load_dotenv()
+app = FastAPI()
+
+backend = InMemoryBackend()
+
+app.add_middleware(SessionMiddleware, secret_key="your-secret-key", backend=backend)
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
-
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")  # Make sure this is set in .env
-SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/callback" # Correctly loaded from .env
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SCOPES = "user-top-read user-read-recently-played"
 
-def get_spotify_token(request: Request):
-    return request.session.get("spotify_token")
+def get_spotify_login_url(request: Request):
+    state = os.urandom(16).hex()
+    request.session["spotify_auth_state"] = state  # Save state in session
+    params = {
+        "client_id": SPOTIFY_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": SPOTIFY_REDIRECT_URI,
+        "scope": SCOPES,
+        "state": state
+    }
+    return f"{SPOTIFY_AUTH_URL}?{urlencode(params)}"
 
-def exchange_code_for_token(code: str):
-    response = requests.post(SPOTIFY_TOKEN_URL, data={
+async def get_spotify_token(code: str, state: str, request: Request):
+    # Check that the 'state' matches
+    stored_state = request.session.get("spotify_auth_state")
+    if not stored_state or stored_state != state:
+        raise HTTPException(status_code=400, detail="State mismatch. Possible CSRF attack.")
+    
+    url = "https://accounts.spotify.com/api/token"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    payload = {
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": SPOTIFY_REDIRECT_URI,
         "client_id": SPOTIFY_CLIENT_ID,
         "client_secret": SPOTIFY_CLIENT_SECRET
-    })
-    return response.json()
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers, data=payload)
+    
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=f"Error fetching access token: {response.text}")
+    
+    # Process the response
+    token_info = response.json()
+    request.session["spotify_token"] = token_info.get("access_token")
+    request.session["refresh_token"] = token_info.get("refresh_token")
+    request.session["token_expires"] = time.time() + token_info.get("expires_in", 3600)  # Set expiration time
+
+    return token_info
+
+def refresh_access_token(refresh_token: str):
+    url = "https://accounts.spotify.com/api/token"
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": SPOTIFY_CLIENT_ID,
+        "client_secret": SPOTIFY_CLIENT_SECRET
+    }
+
+    try:
+        response = requests.post(url, data=data)
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx, 5xx)
+
+        new_token_data = response.json()
+
+        # Check if the 'access_token' is in the response data
+        if "access_token" in new_token_data:
+            access_token = new_token_data["access_token"]
+            expires_in = new_token_data.get("expires_in", 3600)  # Default to 3600 seconds if not provided
+            return access_token, expires_in
+        
+        # If 'access_token' is not in the response, print the error message
+        print("Error refreshing token: Missing 'access_token' in response.", new_token_data)
+        return None, None
+
+    except requests.exceptions.RequestException as e:
+        # Catch any exception raised by requests (network issues, invalid response, etc.)
+        print(f"Error refreshing token: {e}")
+        return None, None
+
+def get_valid_token(request: Request):
+    token = request.session.get("spotify_token")
+    refresh_token = request.session.get("refresh_token")
+    token_expires = request.session.get("token_expires")
+
+    # Check if the token is valid (not expired)
+    if token and token_expires and time.time() < token_expires:
+        return token  # Token is still valid
+
+    # If token is expired, try refreshing it using the refresh token
+    if refresh_token:
+        print("Token expired, attempting to refresh...")
+        new_token, expires_in = refresh_access_token(refresh_token)
+        if new_token:
+            # Save the new token and its expiration time in the session
+            request.session["spotify_token"] = new_token
+            request.session["token_expires"] = time.time() + expires_in
+            print("Token refreshed successfully.")
+            return new_token
+
+    # If no valid token or refresh token is available, return None
+    print("No valid token available.")
+    return None
 
 def handle_spotify_callback(request: Request):
     code = request.query_params.get("code")
@@ -36,7 +131,7 @@ def handle_spotify_callback(request: Request):
         return {"error": "Authorization failed"}
 
     # Step 1: Get the access token
-    token_info = exchange_code_for_token(code)
+    token_info = get_spotify_token(code)
 
     if "access_token" not in token_info:
         return {"error": "Failed to get access token"}
@@ -70,42 +165,7 @@ def handle_spotify_callback(request: Request):
         "access_token": access_token
     }
     
-def get_spotify_login_url():
-    params = {
-        "client_id": SPOTIFY_CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": SPOTIFY_REDIRECT_URI,
-        "scope": SCOPES
-    }
-    return f"{SPOTIFY_AUTH_URL}?{urlencode(params)}"
 
-
-def exchange_code_for_token(code: str):
-    token_url = "https://accounts.spotify.com/api/token"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    payload = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": SPOTIFY_REDIRECT_URI,
-        "client_id": SPOTIFY_CLIENT_ID,
-        "client_secret": SPOTIFY_CLIENT_SECRET
-    }
-    response = requests.post(token_url, headers=headers, data=payload)
-    
-    if response.status_code != 200:
-        raise Exception(f"Error fetching access token: {response.status_code}, {response.text}")
-    
-    return response.json()
-
-
-def get_user_id_from_session(request: Request):
-
-    user_id = request.session.get("user_id")  # Assuming you're using session for user authentication
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return user_id
 
 
 def user_info_to_database(user_profile):
@@ -117,7 +177,7 @@ def user_info_to_database(user_profile):
         if isinstance(user_profile, dict):  # Check if the data is a dictionary
             id = user_profile.get("id")
             username = user_profile.get("display_name")
-            email = user_profile.get("email")
+            email = user_profile.get("email", "unknown_email@example.com")
 
             info_users.append((id, username, email))
 
@@ -128,6 +188,7 @@ def user_info_to_database(user_profile):
                     "ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, username = EXCLUDED.username", 
                     info_users
                 )
+                return info_users
             else: 
                 print("No user data to insert.")
             db.commit()
@@ -141,4 +202,3 @@ def user_info_to_database(user_profile):
     finally:
         cursor.close()
         db.close()
-

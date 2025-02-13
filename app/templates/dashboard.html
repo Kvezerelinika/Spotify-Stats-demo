@@ -16,22 +16,6 @@
         <p>No data available. Try logging in with Spotify.</p>
     {% endif %}
 
-    <h2>Recently Played Tracks</h2>
-    {% if recently_played %}
-        <ul>
-        {% for track in recently_played["items"] %}
-            <li>
-                <strong>{{ track.track.name }}</strong> by 
-                {% for artist in track.track.artists %}
-                    {{ artist.name }}{% if not loop.last %}, {% endif %}
-                {% endfor %}
-            </li>
-        {% endfor %}
-        </ul>
-    {% else %}
-        <p>No recent tracks found. Try playing some music on Spotify.</p>
-    {% endif %}
-
     <h2>Your Recently Played Songs</h2>
     {% if recently_played %}
         <ul>
@@ -49,5 +33,11 @@
     {% else %}
         <p>No recent tracks found. Try playing some music on Spotify.</p>
     {% endif %}
+
+    <h2>Total Plays Per Day</h2>
+    {% for date, count in daily_listening_counts.items() %}
+        <p>{{ date }}: {{ count }} listens</p>
+    {% endfor %}
+
     
 {% endblock %}
