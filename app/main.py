@@ -27,13 +27,8 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # ---------------------------------------
 
 @app.get("/")
-def root(request: Request, token: str = Depends(get_spotify_token)):
-    """Fetch top artists from Spotify and display on homepage."""
-    if not token:
-        return RedirectResponse("/login")
-
-    top_artists = get_top_artists(token)  # Fetch data from Spotify API
-    return templates.TemplateResponse("index.html", {"request": request, "top_artists": top_artists})
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/login-page")
 def login_page(request: Request):
