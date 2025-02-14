@@ -3,11 +3,6 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
-from collections import Counter
-from collections import defaultdict
-from datetime import datetime
-import httpx
-
 
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
@@ -88,17 +83,6 @@ async def callback(request: Request):
         # Log the error and return a response
         print(f"Error during token exchange: {str(e)}")
         return {"error": f"Error during token exchange: {str(e)}"}
-
-
-
-
-
-
-
-
-
-
-
 
 # ---------------------------------------
 # 🎵 2️⃣ Fetch & Display Spotify Data
