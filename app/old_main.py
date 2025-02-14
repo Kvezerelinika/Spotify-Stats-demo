@@ -8,12 +8,9 @@ from collections import defaultdict
 from datetime import datetime
 import httpx
 
-
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
 from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile
-from app.crud import recents_to_database, top_artists_to_database
-from app.database import get_db_connection
 
 # Initialize FastAPI only once
 app = FastAPI()
@@ -106,52 +103,100 @@ async def callback(request: Request):
 
 @app.get("/dashboard")
 async def dashboard(request: Request):
-    db = get_db_connection()
-    cursor = db.cursor()
-
-    # Fetch user info
+    """Render the dashboard page with top artists & recently played tracks."""
+    
+    # Fetch the Spotify token from session
     token = request.session.get("spotify_token")
-    user_profile = get_spotify_user_profile(token)
-    user_data = user_info_to_database(user_profile)
-    user_id = user_data[0][0] # If user_data is a list of dictionaries
+    
+    if not token:
+        return RedirectResponse(url="/login")  # Redirect to login if token is missing
 
+    # Fetch user info from Spotify API (using token)
+    url = "https://api.spotify.com/v1/me"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+
+    if response.status_code != 200:
+        return {"error": "Error fetching user profile from Spotify"}
+
+    user_profile = response.json()
+    
+    if user_profile:
+        print("User Profile:", user_profile)  # Debugging the user profile response
+        user_id = user_profile["id"]  # Assign the user ID from the profile to session
+        request.session["user_id"] = user_id  # Store user ID in session
+    
+        # Insert user info into the database
+        get_user = user_info_to_database(user_profile)  # Pass user_profile (make sure it's a dictionary)
+    else:
+        print("Error: No user profile data")
+
+    
+    # Print user info if available
+    if get_user is not None:
+        print("User Info: ", get_user)  # This should now print user info or a meaningful message
+    else:
+        print("No user data available.")
+    
+    # Fetch recently played tracks and top artists
+    recently_played_data = await get_recently_played_tracks(token)
     top_artists = await get_top_artists(token)
-    top_artists_to_database(top_artists, user_id)
+    
+    recently_played = recently_played_data.get("items", [])
+    
+    if not recently_played:
+        return {"error": "No recently played tracks found."}
 
+    # Count occurrences of each track ID
+    if isinstance(recently_played, list) and all(isinstance(track, dict) for track in recently_played):
+        # Dictionary to store total listens per day
+        daily_listening_counts = defaultdict(int)
 
-    cursor.execute("SELECT artist_name FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
-    top_artist_list = cursor.fetchall()
-    print("TOP ARTISTS: ", top_artist_list)
+        # Dictionary to store total plays per track per day
+        track_daily_counts = defaultdict(lambda: defaultdict(int))
 
+        unique_tracks = []
+        seen_tracks = set()
 
-    # Store recent tracks in DB
-    recent_tracks = await get_recently_played_tracks(token)  # Call the function
-    recents_to_database(recent_tracks, user_id)  # Pass the returned data
+        for track in recently_played:
+            track_id = track["track"]["id"]
+            played_at = track["played_at"]  # Example: "2024-02-12T15:30:00Z"
+            
+            # Extract only the date part
+            played_date = datetime.fromisoformat(played_at.replace("Z", "")).date()
 
-    # Fetch track play counts
-    cursor.execute("""SELECT track_name, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name ORDER BY track_play_counts DESC;""", (user_id,))
-    track_play_counts = cursor.fetchall()
+            # Count occurrences of each track per day
+            track_daily_counts[played_date][track_id] += 1
+            daily_listening_counts[played_date] += 1  # Total listens for the day
 
-    # Fetch daily play counts
-    cursor.execute("""SELECT DATE(played_at) AS play_date, COUNT(*) AS daily_play_count FROM listening_history WHERE user_id = %s GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
-    daily_play_count = cursor.fetchall()
+            # Store only unique tracks
+            if track_id not in seen_tracks:
+                unique_tracks.append(track)
+                seen_tracks.add(track_id)
 
-    cursor.execute("SELECT COUNT(*) AS total_play_count FROM listening_history WHERE user_id = %s;", (user_id,))
-    total_play_count = cursor.fetchone()[0]
+        # Assign the play count per track (total daily plays)
+        for track in unique_tracks:
+            track_id = track["track"]["id"]
+            played_at = track["played_at"]
+            played_date = datetime.fromisoformat(played_at.replace("Z", "")).date()
+            track["play_count"] = track_daily_counts[played_date][track_id]
 
-    # Close DB connection
-    cursor.close()
-    db.close()
+        print("Daily Listening Counts:", dict(daily_listening_counts))  # Debugging
 
-    # Return rendered template
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "track_play_counts": track_play_counts,
-            "daily_play_counts": daily_play_count,
-            "total_play_count": total_play_count,
-            "top_artist_list": top_artist_list
-        }
-    )
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "recently_played": unique_tracks,
+                "top_artists": top_artists,
+                "daily_listening_counts": dict(daily_listening_counts),
+            }
+        )
+    else:
+        return {"error": "Unexpected data format for recently played tracks"}
+
 

@@ -6,27 +6,25 @@
 
 {% block main %}
     <h2>Your Top Artists</h2>
-    {% if top_artists and "items" in top_artists %}
+    {% if top_artist_list %}
         <ul>
-        {% for artist in top_artists["items"] %}
-            <li>{{ artist.name }}</li>
-        {% endfor %}
+            {% for artist in top_artist_list %}
+                <li>{{ artist[0] }}</li>  {# artist[0] extracts the artist name from the tuple #}
+            {% endfor %}
         </ul>
     {% else %}
         <p>No data available. Try logging in with Spotify.</p>
     {% endif %}
 
+
     <h2>Your Recently Played Songs</h2>
-    {% if recently_played %}
+    {% if track_play_counts %}
         <ul>
-        {% for track in recently_played %}
+        {% for track in track_play_counts %}
             <li>
-                <strong>{{ track.track.name }}</strong> by
-                {% for artist in track.track.artists %}
-                    {{ artist.name }}{% if not loop.last %}, {% endif %}
-                {% endfor %}
+                <strong>{{ track[0] }}</strong>  <!-- Track Name -->
                 <br>
-                Played {{ track.play_count }} times
+                Played {{ track[1] }} times  <!-- Play Count -->
             </li>
         {% endfor %}
         </ul>
@@ -34,10 +32,25 @@
         <p>No recent tracks found. Try playing some music on Spotify.</p>
     {% endif %}
 
-    <h2>Total Plays Per Day</h2>
-    {% for date, count in daily_listening_counts.items() %}
-        <p>{{ date }}: {{ count }} listens</p>
-    {% endfor %}
-
     
+    <h2>Total Plays Per Day</h2>
+    {% if daily_play_counts %}
+        <ul>
+        {% for play_date, count in daily_play_counts %}
+            <li>{{ play_date }}: {{ count }} listens</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No data available for daily plays.</p>
+    {% endif %}
+
+
+    <h2>Total listen count</h2>
+        {% if total_play_count %}   
+        <ul>
+            <li>{{ total_play_count }}</li>
+        </ul>
+            {% else %}
+                <p>No data available for total plays.</p>
+        {% endif %}
 {% endblock %}

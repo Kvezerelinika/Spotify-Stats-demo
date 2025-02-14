@@ -1,6 +1,7 @@
 from app.database import get_db_connection
 import json
 from datetime import datetime
+import psycopg2  # Assuming you are using PostgreSQL
 
 def top_artists_to_database(top_artists, user_id):
     db = get_db_connection()
@@ -28,12 +29,13 @@ def top_artists_to_database(top_artists, user_id):
         db.commit()
 
     except Exception as e:
-        print(f"Database insertion error: {e}")
+        print(f"Database insertion error in top_artists_to_database: {e}")
         db.rollback()
     
     finally:
         cursor.close()
         db.close()
+
 
 def recents_to_database(recent_tracks, user_id):
     db = get_db_connection()
@@ -41,33 +43,48 @@ def recents_to_database(recent_tracks, user_id):
 
     try:
         recent_records = []
-        for item in recent_tracks["items"]:
-            track = item["track"]
+        for item in recent_tracks.get("items", []):
+            track = item.get("track", {})
 
-            track_id = track["id"]
-            track_name = track["name"]
-            artist_id = track["artists"][0]["id"]
-            artist_name = track["artists"][0]["name"]
-            album_name = track["album"]["name"]
-            album_image_url = track["album"]["images"][0]["url"] if track["album"]["images"] else None
-            played_at = datetime.strptime(item["played_at"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            track_id = track.get("id")
+            track_name = track.get("name")
+            artist_id = track.get("artists", [{}])[0].get("id")
+            artist_name = track.get("artists", [{}])[0].get("name")
+            album_name = track.get("album", {}).get("name")
+            album_images = track.get("album", {}).get("images", [])
+            album_image_url = album_images[0]["url"] if album_images else None
+
+            # Convert played_at string to datetime safely
+            try:
+                played_at = datetime.fromisoformat(item["played_at"].replace("Z", ""))
+            except ValueError:
+                print(f"Skipping invalid timestamp: {item['played_at']}")
+                continue
 
             recent_records.append((user_id, track_id, track_name, artist_id, artist_name, album_name, album_image_url, played_at))
 
         if recent_records:
-            cursor.executemany("INSERT INTO listening_history (user_id, track_id, track_name, artist_id, artist_name, album_name, album_image_url, played_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (played_at) DO NOTHING", recent_records)
+            cursor.executemany(
+                """
+                INSERT INTO listening_history 
+                (user_id, track_id, track_name, artist_id, artist_name, album_name, album_image_url, played_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, played_at) DO NOTHING
+                """,
+                recent_records
+            )
+            db.commit()
         else:
-            print("No tracks played yet")
+            print("No new tracks played.")
 
-        db.commit()
-
-    except Exception as e:
-        print(f"Database insertion error: {e}")
+    except psycopg2.Error as e:
+        print(f"Database error in recents_to_database: {e}")
         db.rollback()
     
     finally:
         cursor.close()
         db.close()
+
 
 def top_tracks_to_database(top_tracks, user_id):
     db = get_db_connection()
@@ -98,7 +115,7 @@ def top_tracks_to_database(top_tracks, user_id):
         db.commit()
 
     except Exception as e:
-        print(f"Database insertion error: {e}")
+        print(f"Database insertion error crud.py top_tracks_to_database: {e}")
         db.rollback()
     
     finally:
