@@ -56,7 +56,7 @@ async def callback(request: Request):
     # Step 1: Verify the 'state' parameter to prevent CSRF attacks
     stored_state = request.session.get("spotify_auth_state")
     if not stored_state or stored_state != state:
-        raise HTTPException(status_code=400, detail="State mismatch. Possible CSRF attack.")
+        raise HTTPException(status_code=400, detail="State mismatch in callback. Possible CSRF attack.")
 
     try:
         # Step 2: Pass the values to get_spotify_token to exchange the authorization code for an access token
