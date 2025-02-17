@@ -19,7 +19,13 @@ app = FastAPI()
 backend = InMemoryBackend()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")
-app.add_middleware(SessionMiddleware, secret_key="SECRET_KEY", backend=backend)
+app.add_middleware(
+    SessionMiddleware,
+    SECRET_KEY="your_secret_key",  # Replace with a strong secret key
+    cookie_secure=True,            # Ensure cookies are only sent over HTTPS
+    cookie_httponly=True,          # Make cookies inaccessible via JavaScript
+    cookie_samesite="None"         # Allow cookies in cross-site requests (for OAuth)
+)
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
