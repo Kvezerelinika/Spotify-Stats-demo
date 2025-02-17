@@ -22,9 +22,9 @@
         <ul>
         {% for track in track_play_counts %}
             <li>
-                <strong>{{ track[0] }}</strong>  <!-- Track Name -->
+                <strong>{{ track[0] }} by {{ track[1] }}</strong>  <!-- Track Name -->
                 <br>
-                Played {{ track[1] }} times  <!-- Play Count -->
+                Played {{ track[2] }} times  <!-- Play Count -->
             </li>
         {% endfor %}
         </ul>
