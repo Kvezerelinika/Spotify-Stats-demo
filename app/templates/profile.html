@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<header>
+    <h1>User Profile</h1>
+</header>
+<section id="profile">
+    <img id="user-image" src="{{ user_image_url }}" alt="User Image">
+    <h2 id="user-name">{{ user_name }}</h2>
+</section>
+<section id="dashboard">
+    <!-- Content from dashboard.html will be included here -->
+</section>
+{% endblock %}

@@ -6,8 +6,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
-from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile
-from app.crud import recents_to_database, top_artists_to_database
+from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks
+from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database
 from app.database import get_db_connection
 
 # Initialize FastAPI only once
@@ -96,20 +96,24 @@ async def dashboard(request: Request):
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0] # If user_data is a list of dictionaries
 
+    # top artists
     top_artists = await get_top_artists(token)
-    top_artists_to_database(top_artists, user_id)
-
+    top_artists_to_database(top_artists, user_id)    
 
     cursor.execute("SELECT artist_name FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
     top_artist_list = cursor.fetchall()
-    print("TOP ARTISTS: ", top_artist_list)
 
+    # top tracks
+    top_tracks = await get_top_tracks(token)
+    top_tracks_to_database(top_tracks, user_id)
 
-    # Store recent tracks in DB
+    cursor.execute("SELECT track_name, artist_name, popularity FROM top_tracks WHERE user_id = %s ORDER BY rank ASC;", (user_id,))
+    top_tracks_list = cursor.fetchall()
+
+    # recent tracks
     recent_tracks = await get_recently_played_tracks(token)  # Call the function
     recents_to_database(recent_tracks, user_id)  # Pass the returned data
 
-    # Fetch track play counts
     cursor.execute("""SELECT track_name, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name ORDER BY track_play_counts DESC;""", (user_id,))
     track_play_counts = cursor.fetchall()
 
@@ -119,6 +123,16 @@ async def dashboard(request: Request):
 
     cursor.execute("SELECT COUNT(*) AS total_play_count FROM listening_history WHERE user_id = %s;", (user_id,))
     total_play_count = cursor.fetchone()[0]
+
+    # Get genres from top artists and count their frequency
+    genres_count = {}
+    for artist in top_artists.get("items", []):
+        artist_genres = artist.get("genres", [])
+        for genre in artist_genres:
+            genres_count[genre] = genres_count.get(genre, 0) + 1
+
+    # Sort genres by frequency and get top 10
+    top_genres = sorted(genres_count.items(), key=lambda x: x[1], reverse=True)[:20]
 
     # Close DB connection
     cursor.close()
@@ -132,7 +146,9 @@ async def dashboard(request: Request):
             "track_play_counts": track_play_counts,
             "daily_play_counts": daily_play_count,
             "total_play_count": total_play_count,
-            "top_artist_list": top_artist_list
+            "top_artist_list": top_artist_list,
+            "top_genres": top_genres,
+            "top_tracks_list": top_tracks_list
         }
     )
 

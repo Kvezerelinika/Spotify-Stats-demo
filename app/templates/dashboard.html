@@ -53,4 +53,27 @@
             {% else %}
                 <p>No data available for total plays.</p>
         {% endif %}
+
+    <h2>Top Genres</h2>
+    {% if top_genres %}
+        <ul>
+            {% for genre, count in top_genres %}
+                <li>{{ genre }}: {{ count }} listens</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+                <p>No data available for top genres.</p>
+    {% endif %}
+
+    <h2>Top Tracks</h2>
+    {% if top_tracks_list %}
+        <ul>
+            {% for track_name, artist_name, popularity in top_tracks_list %}
+                <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+                <p>No data available for top tracks.</p>
+    {% endif %}
+
 {% endblock %}

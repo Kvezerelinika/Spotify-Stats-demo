@@ -25,14 +25,16 @@ async def get_recently_played_tracks(token: str):
     
     return response.json()
 
-def get_top_tracks(token: str):
+async def get_top_tracks(token: str):
     url = "https://api.spotify.com/v1/me/top/tracks?time_range=long_term&limit=50"
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
 
-    if response.status_code == 200:
-        return response.json()
-    return {"error": response.json()}
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=f"Error fetching top tracks: {response.text}")
+    
+    return response.json()
 
 
 def get_all_artists(token: str, id):
