@@ -2,6 +2,7 @@ from app.database import get_db_connection
 import json
 from datetime import datetime
 import psycopg2  # Assuming you are using PostgreSQL
+from app.spotify_api import get_tracks
 
 def top_artists_to_database(top_artists, user_id):
     db = get_db_connection()
@@ -37,7 +38,7 @@ def top_artists_to_database(top_artists, user_id):
         db.close()
 
 
-def recents_to_database(recent_tracks, user_id):
+def recents_to_database(recent_tracks, user_id):   
     db = get_db_connection()
     cursor = db.cursor()
 
@@ -46,6 +47,7 @@ def recents_to_database(recent_tracks, user_id):
         for item in recent_tracks.get("items", []):
             track = item.get("track", {})
 
+            # Get duration_ms directly from the track object since it's already available
             track_id = track.get("id")
             track_name = track.get("name")
             artist_id = track.get("artists", [{}])[0].get("id")
@@ -53,6 +55,7 @@ def recents_to_database(recent_tracks, user_id):
             album_name = track.get("album", {}).get("name")
             album_images = track.get("album", {}).get("images", [])
             album_image_url = album_images[0]["url"] if album_images else None
+            duration_ms = track.get("duration_ms")  # Get duration directly from track
 
             # Convert played_at string to datetime safely
             try:
@@ -61,19 +64,25 @@ def recents_to_database(recent_tracks, user_id):
                 print(f"Skipping invalid timestamp: {item['played_at']}")
                 continue
 
-            recent_records.append((user_id, track_id, track_name, artist_id, artist_name, album_name, album_image_url, played_at))
+            # Add duration_ms to the record tuple
+            recent_records.append((
+                user_id, track_id, track_name, artist_id, artist_name, 
+                album_name, album_image_url, played_at, duration_ms
+            ))
 
         if recent_records:
             cursor.executemany(
                 """
                 INSERT INTO listening_history 
-                (user_id, track_id, track_name, artist_id, artist_name, album_name, album_image_url, played_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                (user_id, track_id, track_name, artist_id, artist_name, 
+                album_name, album_image_url, played_at, duration_ms)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, played_at) DO NOTHING
                 """,
                 recent_records
             )
             db.commit()
+            print(f"Successfully inserted {len(recent_records)} records")
         else:
             print("No new tracks played.")
 
@@ -194,6 +203,38 @@ def all_artists_to_database(top_artists):
 
     except Exception as e:
         print(f"Database insertion error: {e}")
+        db.rollback()
+    
+    finally:
+        cursor.close()
+        db.close()
+
+
+def tracks_to_database(tracks):
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    try:
+        track_records = []
+        for track in tracks["items"]:
+            # Debugging: Print the track dictionary
+            print("Track dictionary:", track)
+
+            track_id = track["id"]
+            duration_ms = track["duration_ms"]
+
+
+            track_records.append((track_id, duration_ms))
+
+        if track_records:
+            update_query = "UPDATE listening_history SET duration_ms = %s WHERE track_id = %s AND duration_ms IS NULL"
+            update_data = [(record[1], record[0]) for record in track_records]
+            cursor.executemany(update_query, update_data)
+            db.commit()
+        else:
+            print("There is no top tracks for this user")
+    except Exception as e:
+        print(f"Database insertion error crud.py tracks_to_database: {e}")
         db.rollback()
     
     finally:

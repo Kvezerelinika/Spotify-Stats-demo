@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
 from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks
-from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database
+from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database, tracks_to_database
 from app.database import get_db_connection
 
 # Initialize FastAPI only once
@@ -28,7 +28,23 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/")
 async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+
+    token = request.session.get("spotify_token")
+    user_profile = get_spotify_user_profile(token)
+    user_data = user_info_to_database(user_profile)
+    user_id = user_data[0][0]
+
+    return templates.TemplateResponse("index.html", {"request": request, "user_id": user_id})
+
+@app.get("/layout")
+async def layout_page(request: Request):
+
+    token = request.session.get("spotify_token")
+    user_profile = get_spotify_user_profile(token)
+    user_data = user_info_to_database(user_profile)
+    user_id = user_data[0][0]
+
+    return templates.TemplateResponse("layout.html", {"request": request, "user_id": user_id})
 
 @app.get("/login-page")
 def login_page(request: Request):
@@ -96,6 +112,7 @@ async def dashboard(request: Request):
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0] # If user_data is a list of dictionaries
 
+    tracks_to_database(token)
     # top artists
     top_artists = await get_top_artists(token)
     top_artists_to_database(top_artists, user_id)    
@@ -124,6 +141,17 @@ async def dashboard(request: Request):
     cursor.execute("SELECT COUNT(*) AS total_play_count FROM listening_history WHERE user_id = %s;", (user_id,))
     total_play_count = cursor.fetchone()[0]
 
+    # Calculate total duration using a single SQL query
+    cursor.execute("""
+        SELECT SUM(duration_ms) 
+        FROM listening_history 
+        WHERE user_id = %s AND duration_ms IS NOT NULL;
+    """, (user_id,))
+    
+    total_duration_ms = cursor.fetchone()[0] or 0  # Use 0 if result is None
+    total_listened_minutes = total_duration_ms / 60000
+    total_listened_hours = total_listened_minutes / 60
+
     # Get genres from top artists and count their frequency
     genres_count = {}
     for artist in top_artists.get("items", []):
@@ -143,12 +171,15 @@ async def dashboard(request: Request):
         "dashboard.html",
         {
             "request": request,
+            "user_id": user_id,
             "track_play_counts": track_play_counts,
             "daily_play_counts": daily_play_count,
             "total_play_count": total_play_count,
             "top_artist_list": top_artist_list,
             "top_genres": top_genres,
-            "top_tracks_list": top_tracks_list
+            "top_tracks_list": top_tracks_list,
+            "total_listened_minutes": total_listened_minutes,
+            "total_listened_hours": total_listened_hours
         }
     )
 

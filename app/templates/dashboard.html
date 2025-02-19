@@ -9,7 +9,7 @@
     {% if top_artist_list %}
         <ul>
             {% for artist in top_artist_list %}
-                <li>{{ artist[0] }}</li>  {# artist[0] extracts the artist name from the tuple #}
+                <li>{{ artist[0] }}</li>  {# artist is a tuple (artist_name, artist_id, artist_popularity), artist[0] extracts the artist name #}
             {% endfor %}
         </ul>
     {% else %}
@@ -22,9 +22,9 @@
         <ul>
         {% for track in track_play_counts %}
             <li>
-                <strong>{{ track[0] }} by {{ track[1] }}</strong>  <!-- Track Name -->
+                <strong>{{ track[0] }} by {{ track[1] }}</strong>  <!-- Track Name (track[0]), Artist Name (track[1]) -->
                 <br>
-                Played {{ track[2] }} times  <!-- Play Count -->
+                Played {{ track[2] }} times  <!-- track is a tuple (track_name, artist_name, play_count), track[2] extracts the play count -->
             </li>
         {% endfor %}
         </ul>
@@ -68,12 +68,21 @@
     <h2>Top Tracks</h2>
     {% if top_tracks_list %}
         <ul>
-            {% for track_name, artist_name, popularity in top_tracks_list %}
+            {% for track_name, artist_name, popularity in top_tracks_list %}  <!-- Track Name, Artist Name, Popularity -->
                 <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
             {% endfor %}
         </ul>
     {% else %}
                 <p>No data available for top tracks.</p>
+    {% endif %}
+
+    <h2> Total listened time</h2>
+    {% if total_listened_minutes or total_listened_hours %}
+        <ul>
+            <li>{{ total_listened_minutes }} minutes | {{ total_listened_hours }} hours</li>
+        </ul>
+    {% else %}
+        <p>No data available for total listened time.</p>
     {% endif %}
 
 {% endblock %}

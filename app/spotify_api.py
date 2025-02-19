@@ -55,6 +55,16 @@ def get_all_albums(token: str, id):
         return response.json()
     return {"error": response.json()}
 
+
+def get_tracks(token: str, id):
+    url = "https://api.spotify.com/v1/tracks/{id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+    return {"error": response.json()}
+
 def get_spotify_user_profile(token):
     url = "https://api.spotify.com/v1/me"
     headers = {"Authorization": f"Bearer {token}"}
