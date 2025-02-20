@@ -1,4 +1,4 @@
-import requests, os, time, httpx
+import requests, os, time, httpx, json
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from app.database import get_db_connection
@@ -181,24 +181,45 @@ def user_info_to_database(user_profile):
 
     try:
         info_users = []
-        if isinstance(user_profile, dict):  # Check if the data is a dictionary
+        if isinstance(user_profile, dict):  # Check if user_profile is a dictionary
             id = user_profile.get("id")
             username = user_profile.get("display_name")
             email = user_profile.get("email", "unknown_email@example.com")
+            display_name = user_profile.get("display_name")  # Fixed incorrect usage
+            country = user_profile.get("country")
+            product = user_profile.get("product")
+            images = user_profile.get("images", [{}])[0].get("url")  # Fixed potential KeyError
+            followers = user_profile.get("followers", {}).get("total", 0)
+            external_urls = user_profile.get("external_urls", {}).get("spotify")
+            href = user_profile.get("href")
+            uri = user_profile.get("uri")
+            type = user_profile.get("type")
 
-            info_users.append((id, username, email))
+            info_users.append((id, username, email, display_name, country, product, images, followers, external_urls, href, uri, type))
 
             if info_users:
                 print("User Info to Insert: ", info_users)  # Debugging before inserting into DB
+                
                 cursor.executemany(
-                    "INSERT INTO users (id, username, email) VALUES (%s, %s, %s)  "
-                    "ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, username = EXCLUDED.username", 
+                    """
+                    INSERT INTO users (id, username, email, display_name, country, product, images, followers, external_urls, href, uri, type) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  
+                    ON CONFLICT (id) DO UPDATE 
+                    SET email = EXCLUDED.email, 
+                        display_name = EXCLUDED.display_name, 
+                        country = EXCLUDED.country, 
+                        followers = EXCLUDED.followers, 
+                        images = EXCLUDED.images, 
+                        external_urls = EXCLUDED.external_urls, 
+                        uri = EXCLUDED.uri
+                    """, 
                     info_users
                 )
+                
+                db.commit()  # Ensure the changes are committed
                 return info_users
-            else: 
+            else:
                 print("No user data to insert.")
-            db.commit()
         else:
             print("Error: user_profile is not a dictionary")
 
