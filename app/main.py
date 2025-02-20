@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
 from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks
-from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database, tracks_to_database
+from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database
 from app.database import get_db_connection
 
 # Initialize FastAPI only once
@@ -112,7 +112,6 @@ async def dashboard(request: Request):
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0] # If user_data is a list of dictionaries
 
-    tracks_to_database(token)
     # top artists
     top_artists = await get_top_artists(token)
     top_artists_to_database(top_artists, user_id)    
@@ -152,6 +151,10 @@ async def dashboard(request: Request):
     total_listened_minutes = total_duration_ms / 60000
     total_listened_hours = total_listened_minutes / 60
 
+    # fetch daily minutes and hours listened
+    cursor.execute("""SELECT DATE(played_at) AS play_date, SUM(duration_ms)/60000 AS daily_minutes, SUM(duration_ms)/3600000 AS daily_hours FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
+    daily_listening_time = cursor.fetchall()
+
     # Get genres from top artists and count their frequency
     genres_count = {}
     for artist in top_artists.get("items", []):
@@ -179,7 +182,8 @@ async def dashboard(request: Request):
             "top_genres": top_genres,
             "top_tracks_list": top_tracks_list,
             "total_listened_minutes": total_listened_minutes,
-            "total_listened_hours": total_listened_hours
+            "total_listened_hours": total_listened_hours,
+            "daily_listening_time": daily_listening_time
         }
     )
 

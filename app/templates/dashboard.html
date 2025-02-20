@@ -76,13 +76,25 @@
                 <p>No data available for top tracks.</p>
     {% endif %}
 
-    <h2> Total listened time</h2>
+    <h2>Total listened time</h2>
     {% if total_listened_minutes or total_listened_hours %}
         <ul>
             <li>{{ total_listened_minutes }} minutes | {{ total_listened_hours }} hours</li>
         </ul>
     {% else %}
         <p>No data available for total listened time.</p>
-    {% endif %}
+    {% endif %}    
 
+    <h2>Total listened minutes and hours</h2>
+    {% if daily_listening_time %}
+        <ul>
+            {% for day in daily_listening_time %}
+                {% set hours = day[1] // 60 %}
+                {% set minutes = day[1] % 60 %}
+                <li>{{ day[0] }}: {{ day[1] }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No data available for total listened time.</p>
+    {% endif %}   
 {% endblock %}

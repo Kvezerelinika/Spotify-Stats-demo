@@ -2,7 +2,6 @@ from app.database import get_db_connection
 import json
 from datetime import datetime
 import psycopg2  # Assuming you are using PostgreSQL
-from app.spotify_api import get_tracks
 
 def top_artists_to_database(top_artists, user_id):
     db = get_db_connection()
@@ -203,38 +202,6 @@ def all_artists_to_database(top_artists):
 
     except Exception as e:
         print(f"Database insertion error: {e}")
-        db.rollback()
-    
-    finally:
-        cursor.close()
-        db.close()
-
-
-def tracks_to_database(tracks):
-    db = get_db_connection()
-    cursor = db.cursor()
-
-    try:
-        track_records = []
-        for track in tracks["items"]:
-            # Debugging: Print the track dictionary
-            print("Track dictionary:", track)
-
-            track_id = track["id"]
-            duration_ms = track["duration_ms"]
-
-
-            track_records.append((track_id, duration_ms))
-
-        if track_records:
-            update_query = "UPDATE listening_history SET duration_ms = %s WHERE track_id = %s AND duration_ms IS NULL"
-            update_data = [(record[1], record[0]) for record in track_records]
-            cursor.executemany(update_query, update_data)
-            db.commit()
-        else:
-            print("There is no top tracks for this user")
-    except Exception as e:
-        print(f"Database insertion error crud.py tracks_to_database: {e}")
         db.rollback()
     
     finally:
