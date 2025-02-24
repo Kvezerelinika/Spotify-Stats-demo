@@ -3,6 +3,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
+from datetime import datetime
+
 
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
@@ -28,23 +30,66 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/")
 async def root(request: Request):
-
+    # Get the Spotify token from the session (None if not logged in)
     token = request.session.get("spotify_token")
-    user_profile = get_spotify_user_profile(token)
-    user_data = user_info_to_database(user_profile)
-    user_id = user_data[0][0]
 
-    return templates.TemplateResponse("index.html", {"request": request, "user_id": user_id})
+    # Default values in case the user is not logged in
+    user_image, user_name = None, "Guest"
+
+    # If the user is logged in, fetch user profile data
+    if token:
+        db = get_db_connection()
+        cursor = db.cursor()
+
+        # Get the user profile from Spotify
+        user_profile = get_spotify_user_profile(token)
+        user_data = user_info_to_database(user_profile)
+        user_id = user_data[0][0]
+
+        # Fetch user info from the database (image and name)
+        cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
+        user_info = cursor.fetchone()  # Fetch only once
+
+        # Handle user information safely
+        if user_info:
+            user_image, user_name = user_info  # Unpack values
+        else:
+            user_image, user_name = None, "Unknown User"  # Default values if data is missing
+
+    # Return the index page with user data
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "user_image": user_image,
+        "user_name": user_name
+    })
 
 @app.get("/layout")
 async def layout_page(request: Request):
+    db = get_db_connection()
+    cursor = db.cursor()
 
     token = request.session.get("spotify_token")
     user_profile = get_spotify_user_profile(token)
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0]
 
-    return templates.TemplateResponse("layout.html", {"request": request, "user_id": user_id})
+    cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
+    user_info = cursor.fetchone()  # Fetch only once
+    if user_info:
+        user_image, user_name = user_info  # Unpack values safely
+    else:
+        user_image, user_name = None, "Unknown User"  # Handle missing data
+
+    print("user image:", user_image)
+    print("user name:", user_name)
+
+    return templates.TemplateResponse("layout.html", {
+        "request": request,
+        "user_id": user_id,
+        "user_image": user_image,
+        "user_name": user_name
+    })
+
 
 @app.get("/login-page")
 def login_page(request: Request):
@@ -53,6 +98,11 @@ def login_page(request: Request):
 @app.get("/login")
 def login(request: Request):
     return RedirectResponse(get_spotify_login_url(request))
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/")
 
 @app.get("/callback")
 async def callback(request: Request):
@@ -112,6 +162,13 @@ async def dashboard(request: Request):
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0] # If user_data is a list of dictionaries
 
+    cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
+    user_info = cursor.fetchone()  # Fetch only once
+    if user_info:
+        user_image, user_name = user_info  # Unpack values safely
+    else:
+        user_image, user_name = None, "Unknown User"  # Handle missing data
+
     # top artists
     top_artists = await get_top_artists(token)
     top_artists_to_database(top_artists, user_id)    
@@ -139,6 +196,11 @@ async def dashboard(request: Request):
 
     cursor.execute("SELECT COUNT(*) AS total_play_count FROM listening_history WHERE user_id = %s;", (user_id,))
     total_play_count = cursor.fetchone()[0]
+
+    # Fetching total plays today
+    today = datetime.today().date()  # Get today's date
+    cursor.execute("""SELECT COUNT(*) FROM listening_history WHERE user_id = %s AND DATE(played_at) = %s;""", (user_id, today))
+    total_play_today = cursor.fetchone()[0] or 0
 
     # Calculate total duration using a single SQL query
     cursor.execute("""
@@ -178,12 +240,15 @@ async def dashboard(request: Request):
             "track_play_counts": track_play_counts,
             "daily_play_counts": daily_play_count,
             "total_play_count": total_play_count,
+            "total_play_today": total_play_today,
             "top_artist_list": top_artist_list,
             "top_genres": top_genres,
             "top_tracks_list": top_tracks_list,
             "total_listened_minutes": total_listened_minutes,
             "total_listened_hours": total_listened_hours,
-            "daily_listening_time": daily_listening_time
+            "daily_listening_time": daily_listening_time,
+            "user_image": user_image,
+            "user_name": user_name
         }
     )
 

@@ -22,40 +22,61 @@
 
     {% if user_id %}
     <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: rgb(51, 49, 51);">
-      <a class="navbar-brand" href="#">Navbar</a>
+      <!-- Logo that links to the homepage -->
+      <a class="navbar-brand" href="/">
+        <!-- You can replace the 'Navbar' text with an actual image or keep the text as logo -->
+        Navbar
+    </a>
+  
+      <!-- Navbar toggle button for small screens -->
       <button class="navbar-toggler" type="button" data-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
+          <span class="navbar-toggler-icon"></span>
       </button>
-      <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
-        <div class="navbar-nav">
-          <a class="nav-item nav-link active" href="#">Home <span class="sr-only">(current)</span></a>
-          <a class="nav-item nav-link" href="/dashboard">Profile</a>
-          <a class="nav-item nav-link" href="#">Menu</a>
-          <a class="nav-item nav-link" href="/logout">Logout</a>
+  
+      <div class="ms-auto navbar-nav">
+        {% if user_name and user_image %}
+        <div class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <img src="{{ user_image }}" alt="Profile Image" class="rounded-circle" width="30" height="30">
+                <h5 class="d-inline ms-2">{{ user_name }}</h5>
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                <li><a class="dropdown-item" href="/profile">Profile</a></li>
+                <li><a class="dropdown-item" href="/logout">Logout</a></li>
+            </ul>
         </div>
+              {% endif %}
+          </div>
       </div>
-    </nav>
+  </nav>  
     {% else %}
     <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: rgb(51, 49, 51);">
-      <a class="navbar-brand" href="#">Navbar</a>
+      <!-- Logo with link to homepage -->
+      <a class="navbar-brand" href="/">Navbar</a>
+  
+      <!-- Navbar toggle button for small screens -->
       <button class="navbar-toggler" type="button" data-toggle="collapse" data-bs-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
+          <span class="navbar-toggler-icon"></span>
       </button>
+  
       <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
-      <div class="navbar-nav me-auto"></div>
-      <div class="navbar-nav">
-        <a class="nav-item nav-link active" href="#">Home <span class="sr-only">(current)</span></a>
-        <a class="nav-item nav-link" href="#">Features</a>
-        <a class="nav-item nav-link" href="#">Pricing</a>
+          <!-- Navbar items aligned to the left -->
+          <div class="navbar-nav">
+              <!-- You can add other menu items here -->
+          </div>
+  
+          <!-- Login button aligned to the right -->
+          <div class="ms-auto">
+              <a href="/login" class="btn btn-success ms-3 my-2 my-lg-0">Login with Spotify</a>
+          </div>
       </div>
-      </div>
-      <a href="/login" class="btn btn-success ms-3 my-2 my-lg-0">Login with Spotify</a>
-      </div>
-    </nav>
+  </nav>
+  
     {% endif %}
-
+    <br>
     <main class="container py-5 text-center">
         {% block main %}{% endblock %}
+
     </main>
 
     <footer class="mb-5"></footer>
