@@ -80,9 +80,6 @@ async def layout_page(request: Request):
     else:
         user_image, user_name = None, "Unknown User"  # Handle missing data
 
-    print("user image:", user_image)
-    print("user name:", user_name)
-
     return templates.TemplateResponse("layout.html", {
         "request": request,
         "user_id": user_id,
@@ -210,8 +207,11 @@ async def dashboard(request: Request):
     """, (user_id,))
     
     total_duration_ms = cursor.fetchone()[0] or 0  # Use 0 if result is None
-    total_listened_minutes = total_duration_ms / 60000
-    total_listened_hours = total_listened_minutes / 60
+    total_listened_min = total_duration_ms / 60000
+    total_listened_minutes = int(total_listened_min)
+
+    total_listened_h = total_listened_minutes / 60
+    total_listened_hours = int(total_listened_h)
 
     # fetch daily minutes and hours listened
     cursor.execute("""SELECT DATE(played_at) AS play_date, SUM(duration_ms)/60000 AS daily_minutes, SUM(duration_ms)/3600000 AS daily_hours FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
