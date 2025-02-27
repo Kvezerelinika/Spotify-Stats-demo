@@ -170,7 +170,7 @@ async def dashboard(request: Request):
     top_artists = await get_top_artists(token)
     top_artists_to_database(top_artists, user_id)    
 
-    cursor.execute("SELECT artist_name FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
+    cursor.execute("SELECT artist_name, image_url FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
     top_artist_list = cursor.fetchall()
 
     # top tracks
@@ -198,6 +198,15 @@ async def dashboard(request: Request):
     today = datetime.today().date()  # Get today's date
     cursor.execute("""SELECT COUNT(*) FROM listening_history WHERE user_id = %s AND DATE(played_at) = %s;""", (user_id, today))
     total_play_today = cursor.fetchone()[0] or 0
+
+    cursor.execute("SELECT track_name AS current_track_name, artist_name AS current_artist_name, album_image_url AS current_album_image_url FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT 1;", (user_id,))
+    album_img = None
+
+    if user_id:
+        cursor.execute("SELECT track_name, artist_name, album_image_url FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT 1;", (user_id,))
+        playing_now_data = cursor.fetchone()
+        if playing_now_data:
+            track_name, artist_name, album_img = playing_now_data
 
     # Calculate total duration using a single SQL query
     cursor.execute("""
@@ -248,7 +257,10 @@ async def dashboard(request: Request):
             "total_listened_hours": total_listened_hours,
             "daily_listening_time": daily_listening_time,
             "user_image": user_image,
-            "user_name": user_name
+            "user_name": user_name,
+            "track_name": track_name,
+            "artist_name": artist_name,
+            "album_img": album_img
         }
     )
 

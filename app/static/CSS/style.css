@@ -29,7 +29,7 @@ h2, ul, li {
     object-fit: cover; 
     object-position: top; 
     border-radius: 50%; 
-    border: 10px solid red;
+    border: 5px solid rgb(0, 0, 0);
 }
 
 .user-title {
@@ -73,7 +73,8 @@ h2, ul, li {
 .yellow { background-color: #FFD700; }
 .red { background-color: #D9534F; }
 .green { background-color: #28A745; }
-.blue { background-color: #6C757D; }
+.blue { background-color: #4383bb; }
+.now-playing { background-color: #af1c77; }
 
 /* Mobile adjustments */
 @media (max-width: 800px) {
@@ -95,8 +96,91 @@ h2, ul, li {
     grid-gap: 10px;
     width: 80%;
     max-width: 1200px;
+    margin: 20px auto; /* Center the element horizontally and add space above and below */
+    align-content: center;
+    justify-content: center; /* Center the grid items horizontally */
+}
+
+.container-top-artists img {
+    width: 50px; 
+    height: 50px; 
+    object-fit: cover; 
+    object-position: top; 
+    border: 1px solid rgb(0, 0, 0);
+    border-radius: 50%;
+    border-radius: 0 !important; /* Force square shape */
+}
+
+.card-body {
+    display: flex;  
+    flex-direction: column;
+    gap: 10px;
+    counter-reset: artist-counter; /* Reset counter */
+}
+
+.artist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    counter-increment: artist-counter; /* Increment counter */
+}
+
+.artist-item span::before {
+    content: counter(artist-counter) ". "; /* Add number before artist name */
+    font-weight: bold;
+}
+
+.artist-item img {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    object-position: top;
+    border: 1px solid rgb(0, 0, 0);
+    border-radius: 0 !important; /* Ensure square shape */
+}
+
+
+
+
+.now-playing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80%;
+    max-width: 300px;
+    max-height: 100px;
     margin: auto;
     margin-bottom: 20px; /* Space between the dashboard and footer */
-    margin-top: 20px; /* Space between the dashboard and footer */
-    align-content: center;
+    background-color: #660761; /* Background color for the box */
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.now-playing img {
+    width: 50px; 
+    height: 50px; 
+    object-fit: cover; 
+    object-position: top; 
+    border: 1px solid rgb(0, 0, 0);
+    margin-right: 60px; /* Space between the image and text */
+}
+
+.now-playing .text-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.now-playing .title { /* Title of the box */
+    font-weight: bold;
+    color: #ffffff; /* White text color */
+    font-size: 16px;
+    margin-right: 10px; /* Space between the image and text */
+    margin-left: 10px; /* Space between the image and text */
+}
+
+.now-playing .number { /* artist and song name in the box */
+    color: #fff; /* White text color */
+    font-size: 14px;
+    margin-right: 10px; /* Space between the image and text */
 }
