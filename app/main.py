@@ -170,21 +170,21 @@ async def dashboard(request: Request):
     top_artists = await get_top_artists(token)
     top_artists_to_database(top_artists, user_id)    
 
-    cursor.execute("SELECT artist_name, image_url FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
+    cursor.execute("SELECT artist_name, image_url, spotify_url FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
     top_artist_list = cursor.fetchall()
 
     # top tracks
     top_tracks = await get_top_tracks(token)
     top_tracks_to_database(top_tracks, user_id)
 
-    cursor.execute("SELECT track_name, artist_name, popularity FROM top_tracks WHERE user_id = %s ORDER BY rank ASC;", (user_id,))
+    cursor.execute("SELECT track_name, artist_name, popularity, album_image_url, spotify_url FROM top_tracks WHERE user_id = %s ORDER BY rank ASC;", (user_id,))
     top_tracks_list = cursor.fetchall()
 
     # recent tracks
     recent_tracks = await get_recently_played_tracks(token)  # Call the function
     recents_to_database(recent_tracks, user_id)  # Pass the returned data
 
-    cursor.execute("""SELECT track_name, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name ORDER BY track_play_counts DESC;""", (user_id,))
+    cursor.execute("""SELECT track_name, artist_name, album_image_url, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name, artist_name, album_image_url ORDER BY track_play_counts DESC LIMIT 10;""", (user_id,))
     track_play_counts = cursor.fetchall()
 
     # Fetch daily play counts

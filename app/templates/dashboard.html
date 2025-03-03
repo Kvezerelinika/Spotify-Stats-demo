@@ -56,8 +56,10 @@
                         <div class="artist-list">
                             {% for artist in top_artist_list %}
                                 <div class="artist-item">
+                                    <a href="{{ artist[2] }}" target="_blank">
                                     <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
                                     <span class="artist-name">{{ artist[0] }}</span>
+                                    </a>
                                 </div>
                             {% endfor %}
                         </div>
@@ -70,28 +72,55 @@
     {% endif %}
 </div>
 
+<div class="container-top-artists mt-5 text-center text-white">
+    {% if top_tracks_list %}
+        <div class="row justify-content-center">
+            <div class="col-4">
+                <div class="card bg-dark text-white mx-auto">
+                    <div class="card-body">
+                        <h2>Your Top Tracks</h2>
+                        <div class="artist-list">
+                            {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
+                                <div class="artist-item">
+                                    <a href="{{ spotify_url }}" target="_blank">
+                                    <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
+                                    <span class="artist-name">{{ track_name }} by {{ artist_name }}</span>
+                                    </a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <p>No data available for top tracks.</p>
+    {% endif %}
+</div>
 
 
 
 
 
 
-
-
-
-    <h2>Your Top Artists</h2>
-    {% if top_artist_list %}
-        <ul>
-            {% for artist in top_artist_list %}
-                <li>{{ artist[0] }}</li>  {# artist is a tuple (artist_name, artist_id, artist_popularity), artist[0] extracts the artist name #}
+<div class="play-counts">
+    {% if track_play_counts %}
+        <h2>Your TOP played song count</h2>
+            {% for track in track_play_counts %}
+                <img src="{{ track[2] }}" alt="{{ track[2] }}">
+                <strong>{{ track[0] }} by {{ track[1] }}</strong>
+                <br>
+                Played {{ track[3] }} times
             {% endfor %}
-        </ul>
     {% else %}
         <p>No data available. Try logging in with Spotify.</p>
     {% endif %}
+</div>
 
 
-    <h2>Your Recently Played Songs</h2>
+
+<div>
+        <h2>Your Recently Played Songs</h2>
     {% if track_play_counts %}
         <ul>
         {% for track in track_play_counts %}
@@ -105,6 +134,7 @@
     {% else %}
         <p>No recent tracks found. Try playing some music on Spotify.</p>
     {% endif %}
+</div>
 
     
     <h2>Total Plays Per Day</h2>
@@ -142,7 +172,7 @@
     <h2>Top Tracks</h2>
     {% if top_tracks_list %}
         <ul>
-            {% for track_name, artist_name, popularity in top_tracks_list %}  <!-- Track Name, Artist Name, Popularity -->
+            {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}  <!-- Track Name, Artist Name, Popularity -->
                 <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
             {% endfor %}
         </ul>
