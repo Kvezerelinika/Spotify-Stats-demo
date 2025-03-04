@@ -46,63 +46,70 @@
 
 
 
-<div class="container-top-artists mt-5 text-center text-white">
-    {% if top_artist_list %}
-        <div class="row justify-content-center">
-            <div class="col-4">
-                <div class="card bg-dark text-white mx-auto">
-                    <div class="card-body">
-                        <h2>Your Top Artists</h2>
-                        <div class="artist-list">
-                            {% for artist in top_artist_list %}
-                                <div class="artist-item">
-                                    <a href="{{ artist[2] }}" target="_blank">
-                                    <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
-                                    <span class="artist-name">{{ artist[0] }}</span>
-                                    </a>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <a href="#tab1">DASHBOARD</a>
+        <a href="#tab2">DAILY PLAYS</a>
+        <a href="#tab3">TOP GENRES</a>
+        <a href="#tab4">TOP TRACKS</a>
+        <a href="#tab5">TOTAL TIME</a>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content">
+        <div class="tab-content" id="tab1">
+            <h2>DASHBOARD</h2>
+            <div class="top-sections-container">
+                <div class="container-top-artists">
+                    {% if top_artist_list %}
+                        <div class="card bg-dark text-white">
+                            <div class="card-body">
+                                <h2>Your Top Artists</h2>
+                                <div class="artist-list">
+                                    {% for artist in top_artist_list %}
+                                        <div class="artist-item">
+                                            <a href="{{ artist[2] }}" target="_blank">
+                                            <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
+                                            <span class="artist-name">{{ artist[0] }}</span>
+                                            </a>
+                                        </div>
+                                    {% endfor %}
                                 </div>
-                            {% endfor %}
+                            </div>
                         </div>
-                    </div>
+                    {% else %}
+                        <p>No data available. Try logging in with Spotify.</p>
+                    {% endif %}
+                </div>
+            
+                <div class="container-top-tracks">
+                    {% if top_tracks_list %}
+                        <div class="card bg-dark text-white">
+                            <div class="card-body">
+                                <h2>Your Top Tracks</h2>
+                                <div class="artist-list">
+                                    {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
+                                        <div class="artist-item">
+                                            <a href="{{ spotify_url }}" target="_blank">
+                                            <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
+                                            <span class="artist-name">{{ track_name }} by {{ artist_name }}</span>
+                                            </a>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p>No data available for top tracks.</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
-    {% else %}
-        <p>No data available. Try logging in with Spotify.</p>
-    {% endif %}
-</div>
 
-<div class="container-top-artists mt-5 text-center text-white">
-    {% if top_tracks_list %}
-        <div class="row justify-content-center">
-            <div class="col-4">
-                <div class="card bg-dark text-white mx-auto">
-                    <div class="card-body">
-                        <h2>Your Top Tracks</h2>
-                        <div class="artist-list">
-                            {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
-                                <div class="artist-item">
-                                    <a href="{{ spotify_url }}" target="_blank">
-                                    <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
-                                    <span class="artist-name">{{ track_name }} by {{ artist_name }}</span>
-                                    </a>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    {% else %}
-        <p>No data available for top tracks.</p>
-    {% endif %}
-</div>
-
-
-
-
-
-
+        <div class="tab-content" id="tab2">
+            <h2>DAILY PLAYS</h2>
+            
 <div class="play-counts">
     {% if track_play_counts %}
         <h2>Your TOP played song count</h2>
@@ -158,47 +165,68 @@
                 <p>No data available for total plays.</p>
         {% endif %}
 
-    <h2>Top Genres</h2>
-    {% if top_genres %}
-        <ul>
-            {% for genre, count in top_genres %}
-                <li>{{ genre }}: {{ count }} listens</li>
-            {% endfor %}
-        </ul>
-    {% else %}
-                <p>No data available for top genres.</p>
-    {% endif %}
+        </div>
 
-    <h2>Top Tracks</h2>
-    {% if top_tracks_list %}
-        <ul>
-            {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}  <!-- Track Name, Artist Name, Popularity -->
-                <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
-            {% endfor %}
-        </ul>
-    {% else %}
-                <p>No data available for top tracks.</p>
-    {% endif %}
+        <div class="tab-content" id="tab3">
+            <h2>TOP GENRES</h2>
+            {% if top_genres %}
+                <ul>
+                    {% for genre, count in top_genres %}
+                        <li>{{ genre }}: {{ count }} listens</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                        <p>No data available for top genres.</p>
+            {% endif %}
+        </div>
 
-    <h2>Total listened time</h2>
-    {% if total_listened_minutes or total_listened_hours %}
-        <ul>
-            <li>{{ total_listened_minutes }} minutes | {{ total_listened_hours }} hours</li>
-        </ul>
-    {% else %}
-        <p>No data available for total listened time.</p>
-    {% endif %}    
+        <div class="tab-content" id="tab4">
+            <h2>TOP TRACKS</h2>
+            {% if top_tracks_list %}
+                <ul>
+                    {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}  <!-- Track Name, Artist Name, Popularity -->
+                        <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                        <p>No data available for top tracks.</p>
+            {% endif %}
+        </div>
 
-    <h2>Total listened minutes and hours</h2>
-    {% if daily_listening_time %}
-        <ul>
-            {% for day in daily_listening_time %}
-                {% set hours = day[1] // 60 %}
-                {% set minutes = day[1] % 60 %}
-                <li>{{ day[0] }}: {{ day[1] }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>No data available for total listened time.</p>
-    {% endif %}   
+        <div class="tab-content" id="tab5">
+            <h2>TOTAL TIME</h2>
+            <h2>Total listened time</h2>
+            {% if total_listened_minutes or total_listened_hours %}
+                <ul>
+                    <li>{{ total_listened_minutes }} minutes | {{ total_listened_hours }} hours</li>
+                </ul>
+            {% else %}
+                <p>No data available for total listened time.</p>
+            {% endif %}    
+        
+            <h2>Total listened minutes and hours</h2>
+            {% if daily_listening_time %}
+                <ul>
+                    {% for day in daily_listening_time %}
+                        {% set hours = day[1] // 60 %}
+                        {% set minutes = day[1] % 60 %}
+                        <li>{{ day[0] }}: {{ day[1] }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No data available for total listened time.</p>
+            {% endif %}   
+        </div>
+    </div>
+
+<!-- Minimal JavaScript to handle the active tab -->
+<script>
+    document.querySelectorAll('.sidebar a').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.sidebar a').forEach(link => link.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+</script>
+
 {% endblock %}

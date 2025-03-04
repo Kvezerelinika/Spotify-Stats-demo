@@ -8,6 +8,7 @@ body {
     margin: 0;
     padding: 20px; /* Adds spacing at the top */
     box-sizing: border-box;
+
 }
 
 h2, ul, li {
@@ -90,116 +91,73 @@ h2, ul, li {
 }
 
 
-.container-top-artists {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-gap: 10px;
-    width: 80%;
+/* Parent container to align both sections side by side */
+.top-sections-container {
+    display: flex;
+    justify-content: center;
+    align-items: start;
+    gap: 20px; /* Space between the two sections */
+    width: 90%;
     max-width: 1200px;
-    margin: 20px auto; /* Center the element horizontally and add space above and below */
-    align-content: center;
-    justify-content: center; /* Center the grid items horizontally */
+    margin: 20px auto;
 }
 
-.card-body {
-    display: flex;  
-    flex-direction: column;
-    gap: 10px;
-    counter-reset: artist-counter; /* Reset counter for numbering */
+/* Ensure both sections have the same width */
+.container-top-artists, .container-top-tracks {
+    width: 48%; /* Make both sections equal width */
 }
 
+/* Standardize card layout */
+.card {
+    width: 100%;
+    max-width: 500px;
+    margin: auto;
+    padding: 15px;
+    text-align: center;
+    counter-reset: item-counter; /* Reset counter for each list */
+}
+
+/* Standardize artist items */
 .artist-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    counter-increment: artist-counter; /* Increment counter */
     padding: 5px;
     border-radius: 5px;
     transition: background 0.2s ease-in-out;
-}
-.artist-item a {
-    text-decoration: none !important; /* Remove underline */
-    color: white !important; /* Force white text */
-    font-weight: bold;
-}
-
-.artist-item span::before {
-    content: counter(artist-counter) ". "; /* Add numbering */
-    font-weight: bold;
-}
-
-.artist-item:hover {
-    background: rgba(255, 255, 255, 0.1); /* Highlight on hover */
-}
-
-.artist-item img {
-    width: 50px;
-    height: 50px;
-    object-fit: cover;
-    object-position: top;
-    border: 1px solid rgb(0, 0, 0);
-    border-radius: 0 !important; /* Ensure square shape */
-    margin: 3px; /* Space between the image and text */
-}
-
-
-
-
-
-
-.container-top-tracks {
-    display: grid;
-    grid-template-columns: repeat(1, 1fr);
-    grid-gap: 10px;
-    width: 80%;
-    max-width: 1200px;
-    margin: 20px auto; /* Center the element horizontally and add space above and below */
-    align-content: center;
-    justify-content: center; /* Center the grid items horizontally */
-}
-
-.card-body {
-    display: flex;  
-    flex-direction: column;
-    gap: 10px;
-    counter-reset: artist-counter; /* Reset counter for numbering */
-}
-
-.artist-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    counter-increment: artist-counter; /* Increment counter */
-    padding: 5px;
-    border-radius: 5px;
-    transition: background 0.2s ease-in-out;
-    text-overflow: clip;
+    text-overflow: ellipsis;
     white-space: nowrap;
-    overflow: hidden;   
-}
-.artist-item a {
-    text-decoration: none !important; /* Remove underline */
-    color: white !important; /* Force white text */
-    font-weight: bold;
+    overflow: hidden;
 }
 
-.artist-item span::before {
-    content: counter(artist-counter) ". "; /* Add numbering */
-    font-weight: bold;
-}
-
-.artist-item:hover {
-    background: rgba(255, 255, 255, 0.1); /* Highlight on hover */
-}
-
+/* Move image first */
 .artist-item img {
     width: 50px;
     height: 50px;
     object-fit: cover;
     object-position: top;
     border: 1px solid rgb(0, 0, 0);
-    border-radius: 0 !important; /* Ensure square shape */
+    border-radius: 5px;
     margin: 3px; /* Space between the image and text */
+}
+
+/* Add numbering after the image */
+.artist-item::before {
+    counter-increment: item-counter; /* Increment counter */
+    content: counter(item-counter) ". "; /* Add numbering */
+    font-weight: bold;
+    margin-right: 5px; /* Space between number and text */
+    color: white;
+}
+
+/* Ensure text remains readable */
+.artist-item a {
+    text-decoration: none !important;
+    color: white !important;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 
@@ -270,3 +228,63 @@ h2, ul, li {
     border: 1px solid rgb(0, 0, 0);
     margin-right: 60px; /* Space between the image and text */
 }
+
+
+
+
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Sidebar Navigation */
+.sidebar {
+    width: auto; /* Adjust the sidebar to fit content width */
+    padding: 5px;
+    display: flex;
+    flex-direction: row; /* Arrange links horizontally */
+    align-items: center; /* Align items vertically in the center */
+}
+.sidebar a {
+    text-decoration: none;
+    color: #ffffff; /* Default text color for the tabs */
+    font-size: 18px;
+    margin-right: 20px; /* Space between tabs */
+    padding: 5px 0;
+    transition: 0.3s;
+}
+
+/* Hover Effect (Underline only, no color change) */
+.sidebar a:hover {
+    text-decoration: underline;
+    color: inherit; /* Prevent color change on hover */
+}
+
+/* Active tab style */
+.sidebar a.active {
+    text-decoration: underline;
+    color: #0ca819; /* Active color */
+}
+
+/* Content Area */
+.content {
+    padding: 20px;
+}
+
+/* Tab content hidden by default */
+.tab-content {
+    display: none;
+}
+
+/* Show selected tab content when targeted */
+.tab-content:target {
+    display: block;
+}
+
+/* Ensure the active tab's content is visible */
+#tab1:target, #tab2:target, #tab3:target, #tab4:target, #tab5:target {
+    display: block;
+}
+
