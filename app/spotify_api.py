@@ -37,14 +37,16 @@ async def get_top_tracks(token: str):
     return response.json()
 
 
-def get_all_artists(token: str, id):
-    url = "https://api.spotify.com/v1/artists/{id}"
+
+def get_all_artists(token: str, id: str):
+    url = f"https://api.spotify.com/v1/artists/{id}"  # Use f-string to insert `id` value
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
         return response.json()
     return {"error": response.json()}
+
 
 def get_all_albums(token: str, id):
     url = "https://api.spotify.com/v1/albums/{id}"
@@ -56,16 +58,23 @@ def get_all_albums(token: str, id):
     return {"error": response.json()}
 
 
-def get_track(token: str, track_id: str):
-    url = f"https://api.spotify.com/v1/tracks/{track_id}"  # Fixing the f-string
+import requests
+
+def get_track(token, track_ids):
+    url = f"https://api.spotify.com/v1/tracks/{track_ids}"  # Make sure to request the track data properly
     headers = {"Authorization": f"Bearer {token}"}
-    
     response = requests.get(url, headers=headers)
+
+    print(f"Status Code: {response.status_code}")  # Print status code for debugging
+    print(f"Response Text: {response.text}")  # Print raw response before calling .json()
+
     if response.status_code == 200:
-        return response.json()  # Returns a single track object
+        return response.json()  # Assuming the response is a dictionary with track info
     else:
-        print(f"Error fetching track {track_id}: {response.json()}")
-        return None  # Handle errors better
+        print(f"Error fetching track {track_ids}: {response.status_code}")
+        return []  # Return an empty list on error
+
+
 
 
 def get_spotify_user_profile(token):

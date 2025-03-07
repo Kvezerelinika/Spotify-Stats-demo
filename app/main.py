@@ -8,8 +8,8 @@ from datetime import datetime
 
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
-from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks
-from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database
+from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks, get_track
+from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database, all_artist_id_and_image_url_into_database
 from app.database import get_db_connection
 
 # Initialize FastAPI only once
@@ -153,8 +153,11 @@ async def dashboard(request: Request):
     db = get_db_connection()
     cursor = db.cursor()
 
+
+
     # Fetch user info
     token = request.session.get("spotify_token")
+    print("TOKEN: ", token)
     user_profile = get_spotify_user_profile(token)
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0] # If user_data is a list of dictionaries
@@ -180,13 +183,19 @@ async def dashboard(request: Request):
     cursor.execute("SELECT track_name, artist_name, popularity, album_image_url, spotify_url FROM top_tracks WHERE user_id = %s ORDER BY rank ASC;", (user_id,))
     top_tracks_list = cursor.fetchall()
 
+    # recent tracks artist and image_url update
+    #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
+    #track_ids = cursor.fetchall()
+    #all_tracks = get_track(token, track_ids)
+    #all_artist_id_and_image_url_into_database(all_tracks, user_id)
+
     # recent tracks
     recent_tracks = await get_recently_played_tracks(token)  # Call the function
     recents_to_database(recent_tracks, user_id)  # Pass the returned data
 
     cursor.execute("""SELECT track_name, artist_name, album_image_url, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name, artist_name, album_image_url ORDER BY track_play_counts DESC LIMIT 10;""", (user_id,))
     track_play_counts = cursor.fetchall()
-
+         
     # Fetch daily play counts
     cursor.execute("""SELECT DATE(played_at) AS play_date, COUNT(*) AS daily_play_count FROM listening_history WHERE user_id = %s GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
     daily_play_count = cursor.fetchall()
@@ -236,6 +245,9 @@ async def dashboard(request: Request):
     # Sort genres by frequency and get top 10
     top_genres = sorted(genres_count.items(), key=lambda x: x[1], reverse=True)[:20]
 
+
+
+
     # Close DB connection
     cursor.close()
     db.close()
@@ -263,5 +275,119 @@ async def dashboard(request: Request):
             "album_img": album_img
         }
     )
+
+
+import asyncio
+import zipfile
+import json
+from io import BytesIO
+from fastapi import APIRouter, UploadFile, File
+from fastapi.responses import HTMLResponse
+from fastapi import Request
+import logging
+from app.database import get_db_connection
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.get("/upload", response_class=HTMLResponse)
+async def upload_page(request: Request):
+    return templates.TemplateResponse("upload.html", {"request": request})
+
+@app.post("/upload")
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    token = request.session.get("spotify_token")
+    user_profile = get_spotify_user_profile(token)
+    user_data = user_info_to_database(user_profile)
+    user_id = user_data[0][0] 
+
+    # recent tracks artist and image_url update
+    cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
+    track_ids = "2mlNgAeIBnL78ZriXgrRHz"  # Example track ID
+    all_tracks = get_track(token, track_ids)
+    print("all_tracks: ", all_tracks)
+    all_artist_id_and_image_url_into_database(all_tracks, user_id)
+
+
+
+
+    if not file.filename.endswith(".zip"):
+        return {"error": "Please upload a ZIP file"}
+
+    # Extract ZIP file
+    zip_data = await file.read()
+    with zipfile.ZipFile(BytesIO(zip_data), 'r') as zip_ref:
+        json_files = [name for name in zip_ref.namelist() if name.endswith(".json")]
+
+        if not json_files:
+            return {"error": "No JSON files found in ZIP"}
+
+        records = []
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
+                for json_file in json_files:
+                    with zip_ref.open(json_file) as f:
+                        data = json.load(f)
+                        print("Starting to process data")
+                        for entry in data:
+                            if not entry.get("master_metadata_track_name"):
+                                continue  # Skip entries without track info
+
+                            # For now, skip fetching artist/album data and store track info
+                            track_id = entry.get("spotify_track_uri")
+                            records.append(
+                                (
+                                    user_id,
+                                    track_id,
+                                    entry.get("master_metadata_track_name"),
+                                    None,  # No artist_id for now
+                                    entry.get("master_metadata_album_artist_name"),
+                                    entry.get("master_metadata_album_album_name"),
+                                    None,  # No album_image_url for now
+                                    entry.get("ts"),
+                                    entry.get("ms_played")
+                                )
+                            )
+
+                # Insert into database without artist_id and album_image_url
+                cursor.executemany(
+                    """
+                    INSERT INTO listening_history (
+                        user_id, track_id, track_name, artist_id, artist_name,
+                        album_name, album_image_url, played_at, duration_ms
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, played_at) DO NOTHING;
+                    """,
+                    records
+                )
+                print("Inserted records into database: ", len(records))
+                conn.commit()
+
+    return {"message": f"Inserted {len(records)} records into database"}
+    
+
+
+
+import requests
+
+def test_track_ids(token, track_ids):
+    url_template = "https://api.spotify.com/v1/tracks/{}"  # API endpoint for a single track
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for track_id in track_ids:
+        url = url_template.format(track_id)
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            track_data = response.json()
+            artist_id = track_data.get("artists", [{}])[0].get("id", None)
+            album_image_url = track_data.get("album", {}).get("images", [{}])[0].get("url", None)
+            print(f"Track {track_id}: Artist ID: {artist_id}, Album Image: {album_image_url}")
+        else:
+            print(f"Failed to fetch track 1 {track_id}: {response.status_code} - {response.text}")
+
 
 

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auto Trigger POST</title>
+    <script>
+        window.onload = function() {
+            const recentTracks = {
+                "items": [
+                    {
+                        "track": {
+                            "id": "track_id",  // Replace with actual track ID
+                            "album": {
+                                "images": [
+                                    {
+                                        "url": "image_url"  // Replace with actual image URL
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            };
+
+            const userId = "some_user_id";  // Replace with actual user ID
+
+            fetch('/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ recent_tracks: recentTracks, user_id: userId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Data submitted successfully:', data);
+                // Optionally, you can show a success message
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                // Optionally, you can show an error message
+            });
+        };
+    </script>
+</head>
+<body>
+    <h1>Sending Data...</h1>
+    <p>This page automatically sends data to the server when loaded.</p>
+</body>
+</html>

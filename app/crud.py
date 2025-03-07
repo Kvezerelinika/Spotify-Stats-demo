@@ -22,7 +22,7 @@ def top_artists_to_database(top_artists, user_id):
             top_artist.append((user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri))
 
         if top_artist:
-            cursor.executemany("INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (USER_ID, artist_id) DO UPDATE SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url", top_artist)
+            cursor.executemany("INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (USER_ID, artist_id) DO UPDATE SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url, rank = EXCLUDED.rank", top_artist)
         else:
             print("No new top artists to add.")
 
@@ -76,7 +76,9 @@ def recents_to_database(recent_tracks, user_id):
                 (user_id, track_id, track_name, artist_id, artist_name, 
                 album_name, album_image_url, played_at, duration_ms)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (user_id, played_at) DO NOTHING
+                ON CONFLICT (user_id, played_at)
+                DO UPDATE SET album_image_url = EXCLUDED.album_image_url
+                WHERE listening_history.album_image_url != EXCLUDED.album_image_url
                 """,
                 recent_records
             )
@@ -199,6 +201,46 @@ def all_artists_to_database(top_artists):
         else: 
             print("No artist here")
         db.commit()
+
+    except Exception as e:
+        print(f"Database insertion error: {e}")
+        db.rollback()
+    
+    finally:
+        cursor.close()
+        db.close()
+
+
+def all_artist_id_and_image_url_into_database(track_data, user_id):
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    print("track_data from crud.py", track_data)
+
+    try:
+        records = []
+        album = track_data.get("album", {})  # Get album data safely
+        artists = album.get("artists", [])  # Get list of artists
+        images = album.get("images", [])  # Get album images
+
+        for artist in artists:
+            artist_id = artist.get("id")
+            print("artist_id from crud.py", artist_id)
+            
+            image_url = images[0]["url"] if images else None  # Get first image
+            print("image_url from crud.py", image_url)
+
+            if artist_id:
+                records.append((artist_id, image_url, user_id))  # Correct order for query
+
+        if records:
+            cursor.executemany(
+                "UPDATE listening_history SET artist_id = %s, album_image_url = %s WHERE user_id = %s AND track_id = %s",
+                records, track_data.get("id")
+            )
+            db.commit()
+        else:
+            print("No valid artist data to update.")
 
     except Exception as e:
         print(f"Database insertion error: {e}")
