@@ -215,37 +215,75 @@ def all_artist_id_and_image_url_into_database(track_data, user_id):
     db = get_db_connection()
     cursor = db.cursor()
 
-    print("track_data from crud.py", track_data)
-
     try:
-        records = []
-        album = track_data.get("album", {})  # Get album data safely
-        artists = album.get("artists", [])  # Get list of artists
-        images = album.get("images", [])  # Get album images
+        for track in track_data:
+            track_id = track.get("id")
+            album = track.get("album", {})
+            artists = album.get("artists", [])
+            images = album.get("images", [])
+            print(f"Processing track: {track_id}")
+            print(f"album image: {images}")
+            print(f"artists: {artists}")
 
-        for artist in artists:
-            artist_id = artist.get("id")
-            print("artist_id from crud.py", artist_id)
-            
-            image_url = images[0]["url"] if images else None  # Get first image
-            print("image_url from crud.py", image_url)
+            if not track_id or not artists:
+                continue  # Skip if no valid data
+
+            artist_id = artists[0].get("id") if artists else None
+            image_url = images[0]["url"] if images else None
 
             if artist_id:
-                records.append((artist_id, image_url, user_id))  # Correct order for query
+                cursor.execute(
+                    "UPDATE listening_history SET artist_id = %s, album_image_url = %s WHERE user_id = %s AND track_id = %s",
+                    (artist_id, image_url, user_id, track_id)
+                )
 
-        if records:
-            cursor.executemany(
-                "UPDATE listening_history SET artist_id = %s, album_image_url = %s WHERE user_id = %s AND track_id = %s",
-                records, track_data.get("id")
-            )
-            db.commit()
-        else:
-            print("No valid artist data to update.")
+        db.commit()
+        print("Database updated successfully all artists_id album_url in database.")
 
     except Exception as e:
-        print(f"Database insertion error: {e}")
+        print(f"Database update error all artists_id album_url in database: {e}")
         db.rollback()
     
     finally:
         cursor.close()
         db.close()
+
+
+
+
+def process_data(data):
+    """Processes the API response data."""
+    if "tracks" in data:
+        for track in data["tracks"]:
+            print(f"Processing track: {track.get('name', 'Unknown')} by {track.get('artists', 'Unknown')}")
+            # You can save track info to a database or a list
+    else:
+        print("Unexpected response format:", data)
+
+
+import json
+import time
+from app.spotify_api import get_track
+from fastapi import Request
+
+def get_tracks(token, track_ids):
+    batch_size = 20  # Spotify allows up to 50 tracks per request
+    for i in range(0, len(track_ids), batch_size):
+        batch = track_ids[i:i+batch_size]
+        
+        response = get_track(batch, token)  # Your function for API calls
+        
+        if response.status_code == 429:  # Too many requests
+            retry_after = int(response.headers.get("Retry-After", 5))  # Get wait time from response
+            print(f"Rate limit hit. Waiting {retry_after} seconds...")
+            time.sleep(retry_after)  # Wait before retrying
+            continue  # Retry the same batch
+
+        elif response.status_code == 200:
+            process_data(response.json())  # Process the successful response
+        
+        else:
+            print(f"Error fetching batch {i}-{i+batch_size}: {response.status_code}")
+
+
+

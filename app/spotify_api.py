@@ -58,21 +58,43 @@ def get_all_albums(token: str, id):
     return {"error": response.json()}
 
 
+import time
 import requests
+from app.database import get_db_connection
 
 def get_track(token, track_ids):
-    url = f"https://api.spotify.com/v1/tracks/{track_ids}"  # Make sure to request the track data properly
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
+    batch_size = 50  # Max 50 track IDs per request
+    all_tracks = []
 
-    print(f"Status Code: {response.status_code}")  # Print status code for debugging
-    print(f"Response Text: {response.text}")  # Print raw response before calling .json()
+    for i in range(0, len(track_ids), batch_size):
+        batch = track_ids[i : i + batch_size]  # ✅ Correctly slicing track_ids
 
-    if response.status_code == 200:
-        return response.json()  # Assuming the response is a dictionary with track info
-    else:
-        print(f"Error fetching track {track_ids}: {response.status_code}")
-        return []  # Return an empty list on error
+        # Remove "spotify:track:" prefix if present
+        batch = [track_id.replace("spotify:track:", "") for track_id in batch]
+
+        # Print batch to verify track IDs
+        print(f"Batch {i}-{i+batch_size}: {batch}")
+
+        url = f"https://api.spotify.com/v1/tracks?ids={','.join(batch)}"
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(url, headers=headers)
+
+        print(f"Fetching {len(batch)} tracks... Status Code from get_tracks: {response.status_code}")
+
+        if response.status_code == 200:
+            all_tracks.extend(response.json().get("tracks", []))
+        else:
+            print(f"Error fetching batch from get_tracks {i}-{i+batch_size}: {response.status_code}")
+            print("Response:", response.text)  # Print API response for debugging
+
+        time.sleep(2)  # Prevent hitting rate limits
+
+    return all_tracks
+
+
+
+
+
 
 
 

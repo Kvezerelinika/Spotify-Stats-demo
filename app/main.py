@@ -9,7 +9,7 @@ from datetime import datetime
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
 from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks, get_track
-from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database, all_artist_id_and_image_url_into_database
+from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database, all_artist_id_and_image_url_into_database, get_tracks
 from app.database import get_db_connection
 
 # Initialize FastAPI only once
@@ -189,6 +189,43 @@ async def dashboard(request: Request):
     #all_tracks = get_track(token, track_ids)
     #all_artist_id_and_image_url_into_database(all_tracks, user_id)
 
+    #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
+    #track_ids = [row[0] for row in cursor.fetchall()]  # Extract track IDs as a list
+
+    #if track_ids:  # Ensure there are tracks before calling API
+        #get_tracks(token, track_ids)  # Fetch in batches
+    #all_artist_id_and_image_url_into_database(all_tracks, user_id)  # Update DB
+
+
+    cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s LIMIT 10;", (user_id,))
+    track_ids = [row[0] for row in cursor.fetchall()]  # Extract track IDs as a list
+
+    if track_ids:  # Ensure there are tracks before calling API
+        track_data = get_track(token, track_ids)  # Fetch in batches
+        all_artist_id_and_image_url_into_database(track_data, user_id) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # recent tracks
     recent_tracks = await get_recently_played_tracks(token)  # Call the function
     recents_to_database(recent_tracks, user_id)  # Pass the returned data
@@ -303,11 +340,11 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     user_id = user_data[0][0] 
 
     # recent tracks artist and image_url update
-    cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
-    track_ids = "2mlNgAeIBnL78ZriXgrRHz"  # Example track ID
-    all_tracks = get_track(token, track_ids)
-    print("all_tracks: ", all_tracks)
-    all_artist_id_and_image_url_into_database(all_tracks, user_id)
+    # cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
+    # track_ids = "2mlNgAeIBnL78ZriXgrRHz"  # Example track ID
+    # all_tracks = get_track(token, track_ids)
+    # print("all_tracks: ", all_tracks)
+    # all_artist_id_and_image_url_into_database(all_tracks, user_id)
 
 
 
