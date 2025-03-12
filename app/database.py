@@ -19,7 +19,7 @@ def get_db_connection():
             host = DB_HOST,
             port = DB_PORT
         )
-        print("The conenction has been estabilished!")
+        print("The conenction has been estabilished to the database!")
         return conn
     except Exception as e:
         print(f"Connection error: {e}")

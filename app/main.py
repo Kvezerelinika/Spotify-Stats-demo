@@ -4,13 +4,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from datetime import datetime
+import time
 
 
 # Import Spotify helper functions
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
-from app.spotify_api import get_top_artists, get_recently_played_tracks, get_spotify_user_profile, get_top_tracks, get_track
-from app.crud import recents_to_database, top_artists_to_database, top_tracks_to_database, all_artist_id_and_image_url_into_database, get_tracks
+from app.spotify_api import get_spotify_user_profile
 from app.database import get_db_connection
+from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data)
 
 # Initialize FastAPI only once
 app = FastAPI()
@@ -104,7 +105,7 @@ async def logout(request: Request):
 @app.get("/callback")
 async def callback(request: Request):
     """Handle Spotify OAuth callback."""
-
+    
     # Extract 'code' and 'state' from query parameters
     code = request.query_params.get("code")
     state = request.query_params.get("state")
@@ -112,37 +113,64 @@ async def callback(request: Request):
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing code or state in the callback")
 
-    # Log the values for debugging
-    print(f"Received code: {code}")
-    print(f"Received state: {state}")
-
     # Step 1: Verify the 'state' parameter to prevent CSRF attacks
     stored_state = request.session.get("spotify_auth_state")
-    print("stored_state: ", stored_state)
-    print("state: ", state)
     if not stored_state or stored_state != state:
         raise HTTPException(status_code=400, detail="State mismatch in callback. Possible CSRF attack.")
 
     try:
-        # Step 2: Pass the values to get_spotify_token to exchange the authorization code for an access token
+        # Step 2: Exchange the authorization code for an access token
         token_response = await get_spotify_token(code, state, request)
 
-        # Ensure the response contains an access token
         if "access_token" in token_response:
             access_token = token_response["access_token"]
 
             # Store the access token in session
             request.session["spotify_token"] = access_token
 
-            # Redirect to the dashboard or wherever you need
+            # Step 3: Fetch user data from Spotify
+            user_info = await get_spotify_user_profile(access_token)
+
+            # Step 4: Extract user_id from user info and store it in session
+            user_id = user_info.get("id")
+            if user_id:
+                request.session["user_id"] = user_id  # Save user_id in session
+
+            # Redirect to the dashboard (or another page)
             return RedirectResponse(url="/dashboard")
         else:
             raise HTTPException(status_code=400, detail="No access token returned.")
     
     except Exception as e:
-        # Log the error and return a response
         print(f"Error during token exchange: {str(e)}")
         return {"error": f"Error during token exchange: {str(e)}"}
+
+# Function to fetch user data from Spotify
+import time
+import httpx
+
+async def get_spotify_user_profile(token):
+    url = "https://api.spotify.com/v1/me"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    while True:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+
+            if response.status_code == 200:
+                return response.json()  # ✅ Success
+
+            elif response.status_code == 429:  # 🚨 Too Many Requests
+                retry_after = int(response.headers.get("Retry-After", 5))  # Default wait: 5 sec
+                print(f"⚠️ 429 Too Many Requests. Retrying after {retry_after} seconds...")
+                time.sleep(retry_after)  # ⏳ Wait before retrying
+                continue  # Retry the request
+
+            else:
+                print(f"❌ Error fetching user profile: {response.status_code} - {response.text}")
+                return None  # 🚨 Other errors, return None
+
+
 
 # ---------------------------------------
 # 🎵 2️⃣ Fetch & Display Spotify Data
@@ -152,36 +180,89 @@ async def callback(request: Request):
 async def dashboard(request: Request):
     db = get_db_connection()
     cursor = db.cursor()
+    try:
+        # Fetch user session
+        token = request.session.get("spotify_token")
+        print("token: ", token)
+        user_id = request.session.get("user_id")
+        print("user_id: ", user_id)
+        
+        if not token or not user_id:
+            return RedirectResponse(url="/login")  # Redirect if session is invalid
+
+        # Cache control: Only fetch new data if cache has expired
+        last_fetched = request.session.get("last_fetched", 0)
+        cache_expiry = 3600  # 1 hour
+
+        if time.time() - last_fetched > cache_expiry:
+            print("Fetching fresh data from Spotify...")
+
+            # Fetch and update user profile
+            user_profile = get_spotify_user_profile(token)
+            user_data = user_info_to_database(user_profile)
+            user_id = user_data[0][0]  # Ensure correct user_id
+            print("user_id: ", user_id)
+            request.session["user_id"] = user_id  # Store in session
+
+            # Fetch and update user’s music data
+            await update_user_music_data(token, user_id)
+
+            request.session["last_fetched"] = time.time()  # Update only after data is successfully fetched
+
+        # Fetch user details
+        user_info = get_user_info(user_id, cursor)
+        if user_info:
+            user_image, user_name = user_info
+        else:
+            user_image, user_name = None, "Unknown User"
+
+        # Fetch dashboard stats
+        top_artist_list = get_top_artists_db(user_id, cursor)
+        top_tracks_list = get_top_tracks_db(user_id, cursor)
+        track_play_counts = get_track_play_counts(user_id, cursor)
+        daily_play_count = get_daily_play_counts(user_id, cursor)
+        total_play_count = get_total_play_count(user_id, cursor)
+        total_play_today = get_total_play_today(user_id, cursor)
+        playing_now_data = await get_current_playing(token)
+        total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, cursor)
+        daily_listening_time = get_daily_listening_time(user_id, cursor)
+        top_genres = get_top_genres(user_id, top_artist_list)
+
+    except Exception as e:
+        print(f"Error during fetching data: {e}")
+        return {"error": "There was an issue fetching data. Please try again later."}
+
+    finally:
+        # Close database connection
+        cursor.close()
+        db.close()
+
+    # Render template
+    context = {
+        "request": request,
+        "user_id": user_id,
+        "track_play_counts": track_play_counts,
+        "daily_play_counts": daily_play_count,
+        "total_play_count": total_play_count,
+        "total_play_today": total_play_today,
+        "top_artist_list": top_artist_list,
+        "top_genres": top_genres,
+        "top_tracks_list": top_tracks_list,
+        "total_listened_minutes": total_listened_minutes,
+        "total_listened_hours": total_listened_hours,
+        "daily_listening_time": daily_listening_time,
+        "user_image": user_image,
+        "user_name": user_name,
+        "track_name": playing_now_data.get("track_name"),
+        "artist_name": playing_now_data.get("artist_name"),
+        "album_img": playing_now_data.get("album_image_url"),
+    }
+
+    return templates.TemplateResponse("dashboard.html", context)
 
 
 
-    # Fetch user info
-    token = request.session.get("spotify_token")
-    print("TOKEN: ", token)
-    user_profile = get_spotify_user_profile(token)
-    user_data = user_info_to_database(user_profile)
-    user_id = user_data[0][0] # If user_data is a list of dictionaries
 
-    cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
-    user_info = cursor.fetchone()  # Fetch only once
-    if user_info:
-        user_image, user_name = user_info  # Unpack values safely
-    else:
-        user_image, user_name = None, "Unknown User"  # Handle missing data
-
-    # top artists
-    top_artists = await get_top_artists(token)
-    top_artists_to_database(top_artists, user_id)    
-
-    cursor.execute("SELECT artist_name, image_url, spotify_url FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
-    top_artist_list = cursor.fetchall()
-
-    # top tracks
-    top_tracks = await get_top_tracks(token)
-    top_tracks_to_database(top_tracks, user_id)
-
-    cursor.execute("SELECT track_name, artist_name, popularity, album_image_url, spotify_url FROM top_tracks WHERE user_id = %s ORDER BY rank ASC;", (user_id,))
-    top_tracks_list = cursor.fetchall()
 
     # recent tracks artist and image_url update
     #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
@@ -197,121 +278,12 @@ async def dashboard(request: Request):
     #all_artist_id_and_image_url_into_database(all_tracks, user_id)  # Update DB
 
 
-    cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s LIMIT 10;", (user_id,))
-    track_ids = [row[0] for row in cursor.fetchall()]  # Extract track IDs as a list
+    #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
+    #track_ids = [row[0] for row in cursor.fetchall()]  # Extract track IDs as a list
 
-    if track_ids:  # Ensure there are tracks before calling API
-        track_data = get_track(token, track_ids)  # Fetch in batches
-        all_artist_id_and_image_url_into_database(track_data, user_id) 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # recent tracks
-    recent_tracks = await get_recently_played_tracks(token)  # Call the function
-    recents_to_database(recent_tracks, user_id)  # Pass the returned data
-
-    cursor.execute("""SELECT track_name, artist_name, album_image_url, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name, artist_name, album_image_url ORDER BY track_play_counts DESC LIMIT 10;""", (user_id,))
-    track_play_counts = cursor.fetchall()
-         
-    # Fetch daily play counts
-    cursor.execute("""SELECT DATE(played_at) AS play_date, COUNT(*) AS daily_play_count FROM listening_history WHERE user_id = %s GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
-    daily_play_count = cursor.fetchall()
-
-    cursor.execute("SELECT COUNT(*) AS total_play_count FROM listening_history WHERE user_id = %s;", (user_id,))
-    total_play_count = cursor.fetchone()[0]
-
-    # Fetching total plays today
-    today = datetime.today().date()  # Get today's date
-    cursor.execute("""SELECT COUNT(*) FROM listening_history WHERE user_id = %s AND DATE(played_at) = %s;""", (user_id, today))
-    total_play_today = cursor.fetchone()[0] or 0
-
-    cursor.execute("SELECT track_name AS current_track_name, artist_name AS current_artist_name, album_image_url AS current_album_image_url FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT 1;", (user_id,))
-    album_img = None
-
-    if user_id:
-        cursor.execute("SELECT track_name, artist_name, album_image_url FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT 1;", (user_id,))
-        playing_now_data = cursor.fetchone()
-        if playing_now_data:
-            track_name, artist_name, album_img = playing_now_data
-
-    # Calculate total duration using a single SQL query
-    cursor.execute("""
-        SELECT SUM(duration_ms) 
-        FROM listening_history 
-        WHERE user_id = %s AND duration_ms IS NOT NULL;
-    """, (user_id,))
-    
-    total_duration_ms = cursor.fetchone()[0] or 0  # Use 0 if result is None
-    total_listened_min = total_duration_ms / 60000
-    total_listened_minutes = int(total_listened_min)
-
-    total_listened_h = total_listened_minutes / 60
-    total_listened_hours = int(total_listened_h)
-
-    # fetch daily minutes and hours listened
-    cursor.execute("""SELECT DATE(played_at) AS play_date, SUM(duration_ms)/60000 AS daily_minutes, SUM(duration_ms)/3600000 AS daily_hours FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
-    daily_listening_time = cursor.fetchall()
-
-    # Get genres from top artists and count their frequency
-    genres_count = {}
-    for artist in top_artists.get("items", []):
-        artist_genres = artist.get("genres", [])
-        for genre in artist_genres:
-            genres_count[genre] = genres_count.get(genre, 0) + 1
-
-    # Sort genres by frequency and get top 10
-    top_genres = sorted(genres_count.items(), key=lambda x: x[1], reverse=True)[:20]
-
-
-
-
-    # Close DB connection
-    cursor.close()
-    db.close()
-
-    # Return rendered template
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "user_id": user_id,
-            "track_play_counts": track_play_counts,
-            "daily_play_counts": daily_play_count,
-            "total_play_count": total_play_count,
-            "total_play_today": total_play_today,
-            "top_artist_list": top_artist_list,
-            "top_genres": top_genres,
-            "top_tracks_list": top_tracks_list,
-            "total_listened_minutes": total_listened_minutes,
-            "total_listened_hours": total_listened_hours,
-            "daily_listening_time": daily_listening_time,
-            "user_image": user_image,
-            "user_name": user_name,
-            "track_name": track_name,
-            "artist_name": artist_name,
-            "album_img": album_img
-        }
-    )
+    #if track_ids:  # Ensure there are tracks before calling API
+        #track_data = get_track(token, track_ids)  # Fetch in batches
+        #all_artist_id_and_image_url_into_database(track_data, user_id) 
 
 
 import asyncio

@@ -1,111 +1,92 @@
-import requests, httpx
+import asyncio, httpx
 from fastapi import HTTPException
 
 SPOTIFY_API_URL = "https://api.spotify.com/v1"
 
-async def get_top_artists(token):
+async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name: str = ""):  # Added method_name
     headers = {"Authorization": f"Bearer {token}"}
-    url = "https://api.spotify.com/v1/me/top/artists?time_range=long_term&limit=50"
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-    
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=f"Error fetching recently top artists: {response.text}")
-    
-    return response.json()
+        for attempt in range(retries):
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code == 429:  # Rate limit hit
+                retry_after = int(response.headers.get('Retry-After', 2))  # Default to 2s if missing
+                print(f"Rate limit hit in {method_name}. Retrying after {retry_after} seconds...")
+                await asyncio.sleep(retry_after)
+            elif response.status_code == 200:
+                return response.json()
+            else:
+                raise HTTPException(status_code=response.status_code, detail=f"Error in {method_name}: {response.text}")
+    raise HTTPException(status_code=500, detail=f"Failed in {method_name} after multiple attempts.")
+
+async def get_top_artists(token: str):
+    url = f"{SPOTIFY_API_URL}/me/top/artists?time_range=long_term&limit=50"
+    return await fetch_spotify_data(url, token, method_name="get_top_artists")
 
 async def get_recently_played_tracks(token: str):
-    url = "https://api.spotify.com/v1/me/player/recently-played?limit=50"
-    headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-    
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=f"Error fetching recently played tracks: {response.text}")
-    
-    return response.json()
+    url = f"{SPOTIFY_API_URL}/me/player/recently-played?limit=50"
+    return await fetch_spotify_data(url, token, method_name="get_recently_played_tracks")
 
 async def get_top_tracks(token: str):
-    url = "https://api.spotify.com/v1/me/top/tracks?time_range=long_term&limit=50"
-    headers = {"Authorization": f"Bearer {token}"}
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
+    url = f"{SPOTIFY_API_URL}/me/top/tracks?time_range=long_term&limit=50"
+    return await fetch_spotify_data(url, token, method_name="get_top_tracks")
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=f"Error fetching top tracks: {response.text}")
-    
-    return response.json()
+def get_all_artists(token: str, artist_id: str):
+    url = f"{SPOTIFY_API_URL}/artists/{artist_id}"
+    response = httpx.get(url, headers={"Authorization": f"Bearer {token}"})
+    return response.json() if response.status_code == 200 else {"error in get_all_artists": response.text}
 
+def get_all_albums(token: str, album_id: str):
+    url = f"{SPOTIFY_API_URL}/albums/{album_id}"
+    response = httpx.get(url, headers={"Authorization": f"Bearer {token}"})
+    return response.json() if response.status_code == 200 else {"error in get_all_albums": response.text}
 
-
-def get_all_artists(token: str, id: str):
-    url = f"https://api.spotify.com/v1/artists/{id}"  # Use f-string to insert `id` value
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        return response.json()
-    return {"error": response.json()}
-
-
-def get_all_albums(token: str, id):
-    url = "https://api.spotify.com/v1/albums/{id}"
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        return response.json()
-    return {"error": response.json()}
-
-
-import time
-import requests
-from app.database import get_db_connection
-
-def get_track(token, track_ids):
+def get_track(token: str, track_ids: list):
     batch_size = 50  # Max 50 track IDs per request
     all_tracks = []
-
+    
     for i in range(0, len(track_ids), batch_size):
-        batch = track_ids[i : i + batch_size]  # ✅ Correctly slicing track_ids
-
-        # Remove "spotify:track:" prefix if present
-        batch = [track_id.replace("spotify:track:", "") for track_id in batch]
-
-        # Print batch to verify track IDs
-        print(f"Batch {i}-{i+batch_size}: {batch}")
-
-        url = f"https://api.spotify.com/v1/tracks?ids={','.join(batch)}"
-        headers = {"Authorization": f"Bearer {token}"}
-        response = requests.get(url, headers=headers)
-
-        print(f"Fetching {len(batch)} tracks... Status Code from get_tracks: {response.status_code}")
-
+        batch = [track.replace("spotify:track:", "") for track in track_ids[i : i + batch_size]]
+        url = f"{SPOTIFY_API_URL}/tracks?ids={','.join(batch)}"
+        response = httpx.get(url, headers={"Authorization": f"Bearer {token}"})
+        
         if response.status_code == 200:
             all_tracks.extend(response.json().get("tracks", []))
+        elif response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", 2))
+            print(f"Rate limit hit in get_track. Retrying after {retry_after} seconds...")
+            asyncio.sleep(retry_after)
         else:
-            print(f"Error fetching batch from get_tracks {i}-{i+batch_size}: {response.status_code}")
-            print("Response:", response.text)  # Print API response for debugging
-
-        time.sleep(2)  # Prevent hitting rate limits
-
+            print(f"Error fetching batch in get_track: {response.text}")
+    
     return all_tracks
 
+async def get_spotify_user_profile(token: str):
+    url = f"{SPOTIFY_API_URL}/me"
+    return await fetch_spotify_data(url, token, method_name="get_spotify_user_profile")
 
 
-
-
-
-
-
-
-def get_spotify_user_profile(token):
-    url = "https://api.spotify.com/v1/me"
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(url, headers=headers)
+async def get_now_playing(token: str):
+    url = f"{SPOTIFY_API_URL}/me/player/currently-playing"
+    data = await fetch_spotify_data(url, token, method_name="get_now_playing")
     
-    if response.status_code == 200:
-        return response.json()  # Ensure it returns a valid JSON response with user data
+    # Check if there is currently a track playing
+    if data.get('is_playing', False):
+        track_name = data['item']['name']
+        artists = [artist['name'] for artist in data['item']['artists']]
+        artist_names = ", ".join(artists)
+        
+        # Get the album image (usually the first one in the list is the highest resolution)
+        album_image_url = data['item']['album']['images'][0]['url'] if data['item']['album']['images'] else None
+        
+        return {
+            "track_name": track_name,
+            "artists": artist_names,
+            "album_image_url": album_image_url
+        }
     else:
-        print("Error fetching user profile:", response.text)
-        return None
+        return {
+            "track_name": None,
+            "artists": None,
+            "album_image_url": None
+        }

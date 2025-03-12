@@ -44,6 +44,19 @@
     </div>
 </div>
 
+    
+{% if playing_now_data.track_name %}
+<div class="now-playing">
+    <img src="{{ playing_now_data.album_image_url }}" alt="Album Image">
+    <div class="text-container">
+        <span class="title">Now Playing:</span>
+        <span class="number">{{ playing_now_data.track_name }} by {{ playing_now_data.artists }}</span>
+    </div>
+</div>
+{% else %}
+    <p>No track is currently playing.</p>
+{% endif %}
+
 
 
 
