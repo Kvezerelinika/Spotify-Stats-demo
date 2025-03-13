@@ -3,8 +3,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
-from datetime import datetime
-import time
+import time, asyncio, zipfile, json, logging
+from io import BytesIO
+from fastapi import UploadFile, File
+from fastapi.responses import HTMLResponse
 
 
 # Import Spotify helper functions
@@ -189,14 +191,18 @@ async def dashboard(request: Request, user_id: int, limit: int = 100, offset: in
             return RedirectResponse(url="/login")  # Redirect if session is invalid
 
         # Fetch user profile from Spotify API
-        user_profile = get_spotify_user_profile(token)
-        if not user_profile:
-            return {"error": "Failed to fetch user profile from Spotify."}
+        try:
+            user_profile = get_spotify_user_profile(token)
+            if not user_profile:
+                return {"error": "Failed to fetch user profile from Spotify."}
+        except Exception as e:
+            return {"error": f"An error occurred while fetching user profile: {str(e)}"}
+
 
         # Save user data to DB
         user_data = user_info_to_database(user_profile)
-        user_id = user_data[0][0]  # Ensure correct user_id
-        request.session["user_id"] = user_id  # Store in session
+        user_id = user_data[0][0]
+        request.session["user_id"] = user_id
 
         # Connect to the database
         db = get_db_connection()
@@ -209,13 +215,12 @@ async def dashboard(request: Request, user_id: int, limit: int = 100, offset: in
             update_user_music_data(user_id, token, "top_tracks", "short_term"),
             update_user_music_data(user_id, token, "recent_tracks"),
         ]
-        await asyncio.gather(*tasks)  # Ensures async execution
+        await asyncio.gather(*tasks)
 
-        # Fetch user details
+        # Fetch user details and statistics
         user_info = get_user_info(user_id, cursor)
         user_image, user_name = user_info if user_info else (None, "Unknown User")
 
-        # Fetch dashboard statistics
         top_artist_list = get_top_artists_db(user_id, cursor)
         top_tracks_list = get_top_tracks_db(user_id, cursor)
         track_play_counts = get_track_play_counts(user_id, cursor)
@@ -235,13 +240,11 @@ async def dashboard(request: Request, user_id: int, limit: int = 100, offset: in
         return {"error": "There was an issue fetching data. Please try again later."}
 
     finally:
-        # Close database connection if it was opened
         if cursor:
             cursor.close()
         if db:
             db.close()
 
-    # Render template
     context = {
         "request": request,
         "user_id": user_id,
@@ -264,6 +267,7 @@ async def dashboard(request: Request, user_id: int, limit: int = 100, offset: in
     }
 
     return templates.TemplateResponse("dashboard.html", context)
+
 
 
 
@@ -341,15 +345,7 @@ async def fetch_tab_data(request: Request, tab: str = Query(...)):
 
 
 
-import asyncio
-import zipfile
-import json
-from io import BytesIO
-from fastapi import APIRouter, UploadFile, File
-from fastapi.responses import HTMLResponse
-from fastapi import Request
-import logging
-from app.database import get_db_connection
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

@@ -54,12 +54,20 @@ async def get_current_playing(token):
     return now_playing_data
 
 
+#SUM of the listening minutes and hours for entire history
 def get_total_listening_time(user_id, cursor):
     cursor.execute("SELECT SUM(duration_ms) FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL;", (user_id,))
     total_duration_ms = cursor.fetchone()[0] or 0
     return total_duration_ms // 60000, total_duration_ms // 3600000
 
+#listening minutes and hours for today
+def get_total_listening_time_today(user_id, cursor):
+    today = datetime.today().date()
+    cursor.execute("SELECT SUM(duration_ms) FROM listening_history WHERE user_id = %s AND DATE(played_at) AND duration_ms NOT NULL;", (user_id, today))
+    total_today_duration = cursor.fetchone()[0] or 0
+    return total_today_duration // 60000, total_today_duration // 3600000
 
+#listening minutes and hours for each day (grouped by day)
 def get_daily_listening_time(user_id, cursor):
     cursor.execute("""SELECT DATE(played_at), SUM(duration_ms)/60000, SUM(duration_ms)/3600000 FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
     return cursor.fetchall()
