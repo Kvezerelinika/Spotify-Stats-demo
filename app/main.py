@@ -11,7 +11,7 @@ import time
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
 from app.spotify_api import get_spotify_user_profile
 from app.database import get_db_connection
-from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data)
+from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data, complete_listening_history)
 
 # Initialize FastAPI only once
 app = FastAPI()
@@ -177,65 +177,69 @@ async def get_spotify_user_profile(token):
 # ---------------------------------------
 
 @app.get("/dashboard")
-async def dashboard(request: Request):
-    db = get_db_connection()
-    cursor = db.cursor()
+async def dashboard(request: Request, user_id: int, limit: int = 100, offset: int = 0):
+    db = None
+    cursor = None
     try:
         # Fetch user session
         token = request.session.get("spotify_token")
-        print("token: ", token)
         user_id = request.session.get("user_id")
-        print("user_id: ", user_id)
-        
+
         if not token or not user_id:
             return RedirectResponse(url="/login")  # Redirect if session is invalid
 
-        # Cache control: Only fetch new data if cache has expired
-        last_fetched = request.session.get("last_fetched", 0)
-        cache_expiry = 3600  # 1 hour
+        # Fetch user profile from Spotify API
+        user_profile = get_spotify_user_profile(token)
+        if not user_profile:
+            return {"error": "Failed to fetch user profile from Spotify."}
 
-        if time.time() - last_fetched > cache_expiry:
-            print("Fetching fresh data from Spotify...")
+        # Save user data to DB
+        user_data = user_info_to_database(user_profile)
+        user_id = user_data[0][0]  # Ensure correct user_id
+        request.session["user_id"] = user_id  # Store in session
 
-            # Fetch and update user profile
-            user_profile = get_spotify_user_profile(token)
-            user_data = user_info_to_database(user_profile)
-            user_id = user_data[0][0]  # Ensure correct user_id
-            print("user_id: ", user_id)
-            request.session["user_id"] = user_id  # Store in session
+        # Connect to the database
+        db = get_db_connection()
+        cursor = db.cursor()
 
-            # Fetch and update user’s music data
-            await update_user_music_data(token, user_id)
-
-            request.session["last_fetched"] = time.time()  # Update only after data is successfully fetched
+        # Asynchronously update user's music data
+        tasks = [
+            update_user_music_data(user_id, token, "top_artists", "long_term"),
+            update_user_music_data(user_id, token, "top_artists", "medium_term"),
+            update_user_music_data(user_id, token, "top_tracks", "short_term"),
+            update_user_music_data(user_id, token, "recent_tracks"),
+        ]
+        await asyncio.gather(*tasks)  # Ensures async execution
 
         # Fetch user details
         user_info = get_user_info(user_id, cursor)
-        if user_info:
-            user_image, user_name = user_info
-        else:
-            user_image, user_name = None, "Unknown User"
+        user_image, user_name = user_info if user_info else (None, "Unknown User")
 
-        # Fetch dashboard stats
+        # Fetch dashboard statistics
         top_artist_list = get_top_artists_db(user_id, cursor)
         top_tracks_list = get_top_tracks_db(user_id, cursor)
         track_play_counts = get_track_play_counts(user_id, cursor)
         daily_play_count = get_daily_play_counts(user_id, cursor)
         total_play_count = get_total_play_count(user_id, cursor)
         total_play_today = get_total_play_today(user_id, cursor)
-        playing_now_data = await get_current_playing(token)
         total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, cursor)
         daily_listening_time = get_daily_listening_time(user_id, cursor)
         top_genres = get_top_genres(user_id, top_artist_list)
+        listening_history = complete_listening_history(user_id, cursor, limit, offset)
+
+        # Get currently playing track
+        playing_now_data = await get_current_playing(token)
 
     except Exception as e:
-        print(f"Error during fetching data: {e}")
+        print(f"Error fetching dashboard data: {e}")
         return {"error": "There was an issue fetching data. Please try again later."}
 
     finally:
-        # Close database connection
-        cursor.close()
-        db.close()
+        # Close database connection if it was opened
+        if cursor:
+            cursor.close()
+        if db:
+            db.close()
 
     # Render template
     context = {
@@ -256,6 +260,7 @@ async def dashboard(request: Request):
         "track_name": playing_now_data.get("track_name"),
         "artist_name": playing_now_data.get("artist_name"),
         "album_img": playing_now_data.get("album_image_url"),
+        "listening_history": listening_history
     }
 
     return templates.TemplateResponse("dashboard.html", context)
@@ -284,6 +289,56 @@ async def dashboard(request: Request):
     #if track_ids:  # Ensure there are tracks before calling API
         #track_data = get_track(token, track_ids)  # Fetch in batches
         #all_artist_id_and_image_url_into_database(track_data, user_id) 
+
+from fastapi import Query
+
+@app.get("/fetch-tab-data")
+async def fetch_tab_data(request: Request, tab: str = Query(...)):
+    token = request.session.get("spotify_token")
+    user_id = request.session.get("user_id")
+
+    if not token or not user_id:
+        return {"error": "User not authenticated"}
+
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    try:
+        if tab == "tab1":  # Dashboard
+            top_artists = get_top_artists_db(user_id, cursor)
+            return {"top_artists": top_artists}
+
+        elif tab == "tab2":  # Daily Plays
+            daily_play_counts = get_daily_play_counts(user_id, cursor)
+            return {"daily_play_counts": daily_play_counts}
+
+        elif tab == "tab3":  # Top Genres
+            top_artist_list = get_top_artists_db(user_id, cursor)
+            top_genres = get_top_genres(user_id, top_artist_list)
+            return {"top_genres": top_genres}
+
+        elif tab == "tab4":  # Top Tracks
+            top_tracks_list = get_top_tracks_db(user_id, cursor)
+            return {"top_tracks": top_tracks_list}
+
+        elif tab == "tab5":  # Total Time
+            total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, cursor)
+            return {
+                "total_listened_minutes": total_listened_minutes,
+                "total_listened_hours": total_listened_hours
+            }
+
+        return {"error": "Invalid tab"}
+
+    except Exception as e:
+        print(f"Error fetching data for {tab}: {e}")
+        return {"error": "Internal server error"}
+
+    finally:
+        cursor.close()
+        db.close()
+
+
 
 
 import asyncio
