@@ -178,65 +178,72 @@ async def get_spotify_user_profile(token):
 # 🎵 2️⃣ Fetch & Display Spotify Data
 # ---------------------------------------
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import traceback
+
+executor = ThreadPoolExecutor(max_workers=5)  # Use thread pool for DB calls
+
 @app.get("/dashboard")
-async def dashboard(request: Request, user_id: int, limit: int = 100, offset: int = 0):
+async def dashboard(request: Request, limit: int = 100, offset: int = 0):
     db = None
     cursor = None
     try:
-        # Fetch user session
         token = request.session.get("spotify_token")
         user_id = request.session.get("user_id")
 
         if not token or not user_id:
-            return RedirectResponse(url="/login")  # Redirect if session is invalid
+            return RedirectResponse(url="/login")
 
-        # Fetch user profile from Spotify API
+        # Fetch user profile
         try:
-            user_profile = get_spotify_user_profile(token)
+            user_profile = await get_spotify_user_profile(token)
+            print("Fetched Spotify User Profile:", user_profile)
             if not user_profile:
                 return {"error": "Failed to fetch user profile from Spotify."}
         except Exception as e:
             return {"error": f"An error occurred while fetching user profile: {str(e)}"}
 
-
-        # Save user data to DB
+        # Save user data
         user_data = user_info_to_database(user_profile)
         user_id = user_data[0][0]
         request.session["user_id"] = user_id
 
-        # Connect to the database
+        # Get DB connection
         db = get_db_connection()
         cursor = db.cursor()
 
-        # Asynchronously update user's music data
-        tasks = [
-            update_user_music_data(user_id, token, "top_artists", "long_term"),
-            update_user_music_data(user_id, token, "top_artists", "medium_term"),
-            update_user_music_data(user_id, token, "top_tracks", "short_term"),
-            update_user_music_data(user_id, token, "recent_tracks"),
-        ]
-        await asyncio.gather(*tasks)
+        print(f"Cursor type: {type(cursor)}")
 
-        # Fetch user details and statistics
-        user_info = get_user_info(user_id, cursor)
-        user_image, user_name = user_info if user_info else (None, "Unknown User")
+        # Run sync database calls inside a thread executor
+        loop = asyncio.get_event_loop()
+        user_info = await loop.run_in_executor(executor, get_user_info, user_id, db)
+        top_artist_list = await loop.run_in_executor(executor, get_top_artists_db, user_id, db)
+        top_tracks_list = await loop.run_in_executor(executor, get_top_tracks_db, user_id, db)
+        track_play_counts = await loop.run_in_executor(executor, get_track_play_counts, user_id, db)
+        daily_play_count = await loop.run_in_executor(executor, get_daily_play_counts, user_id, db)
+        total_play_count = await loop.run_in_executor(executor, get_total_play_count, user_id, db)
+        total_play_today = await loop.run_in_executor(executor, get_total_play_today, user_id, db)
+        total_listened_minutes, total_listened_hours = await loop.run_in_executor(
+            executor, get_total_listening_time, user_id, db
+        )
+        daily_listening_time = await loop.run_in_executor(executor, get_daily_listening_time, user_id, cursor)
 
-        top_artist_list = get_top_artists_db(user_id, cursor)
-        top_tracks_list = get_top_tracks_db(user_id, cursor)
-        track_play_counts = get_track_play_counts(user_id, cursor)
-        daily_play_count = get_daily_play_counts(user_id, cursor)
-        total_play_count = get_total_play_count(user_id, cursor)
-        total_play_today = get_total_play_today(user_id, cursor)
-        total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, cursor)
-        daily_listening_time = get_daily_listening_time(user_id, cursor)
-        top_genres = get_top_genres(user_id, top_artist_list)
-        listening_history = complete_listening_history(user_id, cursor, limit, offset)
+        print("Daily Listening Time:", daily_listening_time)
 
-        # Get currently playing track
+        top_genres = await loop.run_in_executor(executor, get_top_genres, user_id, top_artist_list)
+        listening_history = await loop.run_in_executor(executor, complete_listening_history, user_id, db, limit, offset)
+
+        # Get currently playing track (Spotify API is async, so no need for executor)
         playing_now_data = await get_current_playing(token)
+        if playing_now_data is None:
+            playing_now_data = {"track_name": "N/A", "artist_name": "N/A", "album_image_url": "N/A"}
 
     except Exception as e:
-        print(f"Error fetching dashboard data: {e}")
+        print(f"Error fetching dashboard data: {str(e)}")
+        print("Detailed traceback:")
+        traceback.print_exc()  # This will print the full traceback to the console
+
         return {"error": "There was an issue fetching data. Please try again later."}
 
     finally:
@@ -245,6 +252,7 @@ async def dashboard(request: Request, user_id: int, limit: int = 100, offset: in
         if db:
             db.close()
 
+    # Render dashboard template
     context = {
         "request": request,
         "user_id": user_id,
@@ -258,15 +266,18 @@ async def dashboard(request: Request, user_id: int, limit: int = 100, offset: in
         "total_listened_minutes": total_listened_minutes,
         "total_listened_hours": total_listened_hours,
         "daily_listening_time": daily_listening_time,
-        "user_image": user_image,
-        "user_name": user_name,
+        "user_image": user_info[0] if user_info else None,
+        "user_name": user_info[1] if user_info else "Unknown User",
         "track_name": playing_now_data.get("track_name"),
         "artist_name": playing_now_data.get("artist_name"),
         "album_img": playing_now_data.get("album_image_url"),
-        "listening_history": listening_history
+        "listening_history": listening_history,
     }
 
     return templates.TemplateResponse("dashboard.html", context)
+
+
+
 
 
 
@@ -309,24 +320,24 @@ async def fetch_tab_data(request: Request, tab: str = Query(...)):
 
     try:
         if tab == "tab1":  # Dashboard
-            top_artists = get_top_artists_db(user_id, cursor)
+            top_artists = get_top_artists_db(user_id, db)
             return {"top_artists": top_artists}
 
         elif tab == "tab2":  # Daily Plays
-            daily_play_counts = get_daily_play_counts(user_id, cursor)
+            daily_play_counts = get_daily_play_counts(user_id, db)
             return {"daily_play_counts": daily_play_counts}
 
         elif tab == "tab3":  # Top Genres
-            top_artist_list = get_top_artists_db(user_id, cursor)
+            top_artist_list = get_top_artists_db(user_id, db)
             top_genres = get_top_genres(user_id, top_artist_list)
             return {"top_genres": top_genres}
 
         elif tab == "tab4":  # Top Tracks
-            top_tracks_list = get_top_tracks_db(user_id, cursor)
+            top_tracks_list = get_top_tracks_db(user_id, db)
             return {"top_tracks": top_tracks_list}
 
         elif tab == "tab5":  # Total Time
-            total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, cursor)
+            total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, db)
             return {
                 "total_listened_minutes": total_listened_minutes,
                 "total_listened_hours": total_listened_hours

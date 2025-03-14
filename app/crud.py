@@ -1,11 +1,11 @@
 from app.database import get_db_connection
-import json
+import json, asyncpg
 from datetime import datetime
 import psycopg2  # Assuming you are using PostgreSQL
 
-def top_artists_to_database(top_artists, user_id):
-    db = get_db_connection()
-    cursor = db.cursor()
+async def top_artists_to_database(top_artists, user_id):
+    db = await get_db_connection()
+    cursor = await db.cursor()
 
     try:
         top_artist = []
@@ -22,7 +22,7 @@ def top_artists_to_database(top_artists, user_id):
             top_artist.append((user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri))
 
         if top_artist:
-            cursor.executemany("INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (USER_ID, artist_id) DO UPDATE SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url, rank = EXCLUDED.rank", top_artist)
+            await cursor.executemany("INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (USER_ID, artist_id) DO UPDATE SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url, rank = EXCLUDED.rank", top_artist)
         else:
             print("No new top artists to add.")
 
@@ -37,9 +37,12 @@ def top_artists_to_database(top_artists, user_id):
         db.close()
 
 
-def recents_to_database(recent_tracks, user_id):   
-    db = get_db_connection()
-    cursor = db.cursor()
+async def recents_to_database(recent_tracks, user_id):   
+    # Debugging the recent_tracks
+    print("Recent tracks data received:", recent_tracks)  # Debugging line
+
+    db = await get_db_connection()
+    cursor = await db.cursor()
 
     try:
         recent_records = []
@@ -70,7 +73,7 @@ def recents_to_database(recent_tracks, user_id):
             ))
 
         if recent_records:
-            cursor.executemany(
+            await cursor.executemany(
                 """
                 INSERT INTO listening_history 
                 (user_id, track_id, track_name, artist_id, artist_name, 
@@ -82,7 +85,7 @@ def recents_to_database(recent_tracks, user_id):
                 """,
                 recent_records
             )
-            db.commit()
+            await db.commit()
             print(f"Successfully inserted {len(recent_records)} records")
         else:
             print("No new tracks played.")
@@ -92,13 +95,13 @@ def recents_to_database(recent_tracks, user_id):
         db.rollback()
     
     finally:
-        cursor.close()
-        db.close()
+        await cursor.close()
+        await db.close()
 
 
-def top_tracks_to_database(top_tracks, user_id):
-    db = get_db_connection()
-    cursor = db.cursor()
+async def top_tracks_to_database(top_tracks, user_id):
+    db = await get_db_connection()
+    cursor = await db.cursor()
 
     try:
         top_records = []
@@ -121,7 +124,7 @@ def top_tracks_to_database(top_tracks, user_id):
             top_records.append((user_id, track_id, track_name, artist_id, artist_name, album_id, album_name, album_image_url, release_date, duration_ms, is_explicit, spotify_url, popularity, rank))
 
         if top_records:
-            cursor.executemany("INSERT INTO top_tracks (user_id, track_id, track_name, artist_id, artist_name, album_id, album_name, album_image_url, release_date, duration_ms, is_explicit, spotify_url, popularity, rank) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (user_id, track_id) DO UPDATE SET rank = EXCLUDED.rank", top_records)
+            await cursor.executemany("INSERT INTO top_tracks (user_id, track_id, track_name, artist_id, artist_name, album_id, album_name, album_image_url, release_date, duration_ms, is_explicit, spotify_url, popularity, rank) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (user_id, track_id) DO UPDATE SET rank = EXCLUDED.rank", top_records)
         else:
             print("There is no top tracks for this user")
         
@@ -137,8 +140,8 @@ def top_tracks_to_database(top_tracks, user_id):
 
 
 async def all_albums_to_database(all_albums):
-    db = get_db_connection()
-    cursor = db.cursor()
+    db = await get_db_connection()
+    cursor = await db.cursor()
 
     try:
         tot_albums = []
@@ -164,7 +167,7 @@ async def all_albums_to_database(all_albums):
             tot_albums.append((id, name, album_type, total_tracks, release_date, release_date_precision, restrictions_reason, spotify_url, image_url, uri, popularity, label, genres, external_isrc, external_ean, external_upc))
 
         if tot_albums:
-            cursor.executemany("INSERT INTO albums (id, name, album_type, total_tracks, release_date, release_date_precision, restrictions_reason, spotify_url, image_url, uri, popularity, label, genres, external_isrc,external_ean, external_upc) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  ON CONFLICT (uri) DO UPDATE SET popularity = EXCLUDED.popularity, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url", tot_albums)
+            await cursor.executemany("INSERT INTO albums (id, name, album_type, total_tracks, release_date, release_date_precision, restrictions_reason, spotify_url, image_url, uri, popularity, label, genres, external_isrc,external_ean, external_upc) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  ON CONFLICT (uri) DO UPDATE SET popularity = EXCLUDED.popularity, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url", tot_albums)
         else:
             print("No new albums to add.")
         
@@ -178,9 +181,9 @@ async def all_albums_to_database(all_albums):
         cursor.close()
         db.close()
 
-def all_artists_to_database(top_artists):
-    db = get_db_connection()
-    cursor = db.cursor()
+async def all_artists_to_database(top_artists):
+    db = await get_db_connection()
+    cursor = await db.cursor()
 
 
     try:
@@ -197,7 +200,7 @@ def all_artists_to_database(top_artists):
             artist_records.append((artist_id, name, popularity, followers, genres, image_url, api_data))
 
         if artist_records:
-            cursor.executemany("INSERT INTO all_artists (artist_id, name, popularity, followers, genres, image_url, api_data) VALUES (%s, %s, %s, %s, %s, %s, %s)  ON CONFLICT (artist_id) DO UPDATE SET followers = EXCLUDED.followers, popularity = EXCLUDED.popularity, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url", artist_records)
+            await cursor.executemany("INSERT INTO all_artists (artist_id, name, popularity, followers, genres, image_url, api_data) VALUES (%s, %s, %s, %s, %s, %s, %s)  ON CONFLICT (artist_id) DO UPDATE SET followers = EXCLUDED.followers, popularity = EXCLUDED.popularity, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url", artist_records)
         else: 
             print("No artist here")
         db.commit()
@@ -211,9 +214,9 @@ def all_artists_to_database(top_artists):
         db.close()
 
 
-def all_artist_id_and_image_url_into_database(track_data, user_id):
-    db = get_db_connection()
-    cursor = db.cursor()
+async def all_artist_id_and_image_url_into_database(track_data, user_id):
+    db = await get_db_connection()
+    cursor = await db.cursor()
 
     try:
         for track in track_data:
@@ -234,7 +237,7 @@ def all_artist_id_and_image_url_into_database(track_data, user_id):
             print(f"image_url: {image_url}")
 
             if artist_id:
-                cursor.execute(
+                await cursor.execute(
                     "UPDATE listening_history SET artist_id = %s, album_image_url = %s WHERE user_id = %s AND track_id = %s",
                     (artist_id, image_url, user_id, track_id)
                 )
@@ -269,12 +272,12 @@ import time
 from app.spotify_api import get_track
 from fastapi import Request
 
-def get_tracks(token, track_ids):
+async def get_tracks(token, track_ids):
     batch_size = 20  # Spotify allows up to 50 tracks per request
     for i in range(0, len(track_ids), batch_size):
         batch = track_ids[i:i+batch_size]
         
-        response = get_track(batch, token)  # Your function for API calls
+        response = await get_track(batch, token)  # Your function for API calls
         
         if response.status_code == 429:  # Too many requests
             retry_after = int(response.headers.get("Retry-After", 5))  # Get wait time from response
@@ -283,7 +286,7 @@ def get_tracks(token, track_ids):
             continue  # Retry the same batch
 
         elif response.status_code == 200:
-            process_data(response.json())  # Process the successful response
+            await process_data(response.json())  # Process the successful response
         
         else:
             print(f"Error fetching batch {i}-{i+batch_size}: {response.status_code}")

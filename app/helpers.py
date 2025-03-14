@@ -6,40 +6,107 @@ from app.spotify_api import get_top_artists, get_top_tracks, get_recently_played
 from app.crud import top_artists_to_database, top_tracks_to_database, recents_to_database
 from app.database import get_db_connection
 
-def get_user_info(user_id, cursor):
+def get_user_info(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
-    return cursor.fetchone()
+    result = cursor.fetchone()
+    cursor.close()
+    return result
 
 
-def get_top_artists_db(user_id, cursor):
+def get_top_artists_db(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("SELECT artist_name, image_url, spotify_url FROM users_top_artists WHERE user_id = %s ORDER BY id ASC;", (user_id,))
-    return cursor.fetchall()
+    result = cursor.fetchall()
+    cursor.close()
+    return result
 
 
-def get_top_tracks_db(user_id, cursor):
+def get_top_tracks_db(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("SELECT track_name, artist_name, popularity, album_image_url, spotify_url FROM top_tracks WHERE user_id = %s ORDER BY rank ASC;", (user_id,))
-    return cursor.fetchall()
+    result = cursor.fetchall()
+    cursor.close()
+    return result
 
 
-def get_track_play_counts(user_id, cursor):
+def get_track_play_counts(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("""SELECT track_name, artist_name, album_image_url, COUNT(*) AS track_play_counts FROM listening_history WHERE user_id = %s GROUP BY track_name, artist_name, album_image_url ORDER BY track_play_counts DESC LIMIT 10;""", (user_id,))
-    return cursor.fetchall()
+    result = cursor.fetchall()
+    cursor.close()
+    return result
 
 
-def get_daily_play_counts(user_id, cursor):
-    cursor.execute("""SELECT DATE(played_at) AS play_date, COUNT(*) AS daily_play_count FROM listening_history WHERE user_id = %s GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
-    return cursor.fetchall()
+def get_daily_play_counts(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
+    # Execute your query using the cursor
+    cursor.execute("""SELECT DATE(played_at) AS play_date, COUNT(*) AS daily_play_count
+                      FROM listening_history WHERE user_id = %s
+                      GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
+    
+    result = cursor.fetchall()
+    cursor.close()
+    return result
 
 
-def get_total_play_count(user_id, cursor):
+
+def get_total_play_count(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("SELECT COUNT(*) FROM listening_history WHERE user_id = %s;", (user_id,))
-    return cursor.fetchone()[0] or 0
+    result = cursor.fetchone()[0] or 0
+    cursor.close()
+    return result
 
+def get_total_play_today(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
 
-def get_total_play_today(user_id, cursor):
     today = datetime.today().date()
     cursor.execute("SELECT COUNT(*) FROM listening_history WHERE user_id = %s AND DATE(played_at) = %s;", (user_id, today))
-    return cursor.fetchone()[0] or 0
+    result = cursor.fetchone()[0] or 0
+    cursor.close()
+    return result
 
 
 async def get_current_playing(token):
@@ -55,26 +122,48 @@ async def get_current_playing(token):
 
 
 #SUM of the listening minutes and hours for entire history
-def get_total_listening_time(user_id, cursor):
+def get_total_listening_time(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("SELECT SUM(duration_ms) FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL;", (user_id,))
     total_duration_ms = cursor.fetchone()[0] or 0
+    cursor.close()
     return total_duration_ms // 60000, total_duration_ms // 3600000
 
 #listening minutes and hours for today
-def get_total_listening_time_today(user_id, cursor):
+def get_total_listening_time_today(user_id, db):
+    if not hasattr(db, "cursor"):
+        raise ValueError("Invalid database connection object")
+    
+    # Create a cursor from the database connection
+    cursor = db.cursor()
+    print(f"Cursor type: {type(cursor)}")
+
     today = datetime.today().date()
-    cursor.execute("SELECT SUM(duration_ms) FROM listening_history WHERE user_id = %s AND DATE(played_at) AND duration_ms NOT NULL;", (user_id, today))
+    cursor.execute("SELECT SUM(duration_ms) FROM listening_history WHERE user_id = %s AND DATE(played_at) = %s AND duration_ms IS NOT NULL;", (user_id, today))
     total_today_duration = cursor.fetchone()[0] or 0
+    cursor.close()
     return total_today_duration // 60000, total_today_duration // 3600000
 
 #listening minutes and hours for each day (grouped by day)
-def get_daily_listening_time(user_id, cursor):
-    cursor.execute("""SELECT DATE(played_at), SUM(duration_ms)/60000, SUM(duration_ms)/3600000 FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
-    return cursor.fetchall()
+import psycopg2
 
-def complete_listening_history(user_id, cursor, limit=100, offset=0):
-    cursor.execute("""SELECT track_name, artist_name, album_name, album_image_url, played_at FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT %s OFFSET %s""", (user_id, limit, offset))
-    return cursor.fetchall()
+def get_daily_listening_time(user_id, db):
+    cursor = db.cursor()
+    if not hasattr(cursor, "execute"):
+        raise ValueError("Invalid cursor object")
+
+    print(f"Cursor type: {type(cursor)}")
+
+    cursor.execute("""SELECT DATE(played_at) AS play_date, SUM(duration_ms)/60000 AS total_minutes, SUM(duration_ms)/3600000 AS total_hours FROM listening_history WHERE user_id = %s AND duration_ms IS NOT NULL GROUP BY play_date ORDER BY play_date DESC;""", (user_id,))
+    result = cursor.fetchall()
+    cursor.close()
+    return result
 
 def group_by_time_period(records):
     now = datetime.now()
@@ -106,7 +195,13 @@ def group_by_time_period(records):
     
     return time_groups
 
-def complete_listening_history(user_id, cursor, limit=100, offset=0):
+def complete_listening_history(user_id, db, limit=100, offset=0):
+    cursor = db.cursor()
+    if not hasattr(cursor, "execute"):
+        raise ValueError("Invalid cursor object")
+
+    print(f"Cursor type: {type(cursor)}")
+
     cursor.execute("""
         SELECT track_name, artist_name, album_name, album_image_url, played_at
         FROM listening_history
@@ -117,10 +212,17 @@ def complete_listening_history(user_id, cursor, limit=100, offset=0):
     
     records = cursor.fetchall()
     grouped_records = group_by_time_period(records)
+    cursor.close()
     return grouped_records
 
 
-def get_top_genres(user_id, cursor):
+def get_top_genres(user_id, db):
+    cursor = db.cursor()
+    if not hasattr(cursor, "execute"):
+        raise ValueError("Invalid cursor object")
+
+    print(f"Cursor type: {type(cursor)}")
+
     genres_count = {}
     cursor.execute("""SELECT genres FROM users_top_artists WHERE user_id = %s;""", (user_id,))
     artist_genres = cursor.fetchall()  # List of tuples, e.g., [("rock, pop",), ("jazz",), ("pop, hip-hop",)]
@@ -131,6 +233,7 @@ def get_top_genres(user_id, cursor):
             genres_count[genre] = genres_count.get(genre, 0) + 1
     # Sort by count (highest first) and take top 20
     top_genres = sorted(genres_count.items(), key=lambda x: x[1], reverse=True)[:20]
+    cursor.close()
     return top_genres
 
 
@@ -146,20 +249,21 @@ async def get_last_update_from_db(user_id, data_type, time_range):
     db = get_db_connection()
     cursor = db.cursor()
 
-    # Query the last update timestamp for the specified data_type and time_range
-    cursor.execute("""
-        SELECT last_update 
-        FROM user_data 
-        WHERE user_id = %s AND data_type = %s AND time_range = %s;
-    """, (user_id, data_type, time_range))
+    try:
+        # Query the last update timestamp for the specified data_type and time_range
+        cursor.execute("""
+            SELECT last_update 
+            FROM user_data 
+            WHERE user_id = %s AND data_type = %s AND time_range = %s;
+        """, (user_id, data_type, time_range))
 
-    result = cursor.fetchone()
-    cursor.close()
-    db.close()
+        result = cursor.fetchone()
+    finally:
+        cursor.close()
+        db.close()
 
-    if result:
-        return result[0]  # Return the last update timestamp
-    return None  # No record, need to fetch fresh data
+        if result:
+            return result[0] if result else None
 
 
 
@@ -196,13 +300,16 @@ async def update_user_music_data(user_id, token, data_type, time_range=None):
         # Fetch and insert/update the appropriate data
         if data_type == "top_artists":
             top_artists = await get_top_artists(token, time_range)
-            top_artists_to_database(top_artists, user_id, time_range)
+            print(f"Fetched top artists: {top_artists}")  # Debugging
+            await top_artists_to_database(top_artists, user_id, time_range)
         elif data_type == "top_tracks":
             top_tracks = await get_top_tracks(token)
-            top_tracks_to_database(top_tracks, user_id, time_range)
+            print(f"Fetched top tracks: {top_tracks}")  # Debugging
+            await top_tracks_to_database(top_tracks, user_id, time_range)
         elif data_type == "recent_tracks":
             recent_tracks = await get_recently_played_tracks(token)
-            recents_to_database(recent_tracks, user_id)
+            print(f"Fetched recent tracks: {recent_tracks}")  # Debugging
+            await recents_to_database(recent_tracks, user_id)
 
         # Update the last update timestamp in the database
         db = get_db_connection()

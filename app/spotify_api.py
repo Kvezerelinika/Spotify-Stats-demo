@@ -14,7 +14,9 @@ async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name
                 print(f"Rate limit hit in {method_name}. Retrying after {retry_after} seconds...")
                 await asyncio.sleep(retry_after)
             elif response.status_code == 200:
-                return response.json()
+                json_response = await response.json()
+                print(f"{method_name} - JSON Response:", json_response)  # Debugging line
+                return await response.json()
             else:
                 raise HTTPException(status_code=response.status_code, detail=f"Error in {method_name}: {response.text}")
     raise HTTPException(status_code=500, detail=f"Failed in {method_name} after multiple attempts.")
