@@ -178,18 +178,16 @@ def handle_spotify_callback(request: Request):
 
 
 
-def user_info_to_database(user_profile):
-    db = get_db_connection()
-
+async def user_info_to_database(user_profile):
+    db = await get_db_connection()  # Use asyncpg connection
     if db is None:  # Check if connection failed
         print("Database connection failed. Check get_db_connection()!")
         return None
-    
-    cursor = db.cursor()
 
     try:
         info_users = []
         if isinstance(user_profile, dict):  
+            # Extract user profile details
             id = user_profile.get("id")
             username = user_profile.get("display_name")
             email = user_profile.get("email", "unknown_email@example.com")
@@ -197,7 +195,7 @@ def user_info_to_database(user_profile):
             country = user_profile.get("country")
             product = user_profile.get("product")
             images = user_profile.get("images", [{}])[0].get("url")
-            followers = user_profile.get("followers", {}).get("total", 0)
+            followers = str(user_profile.get("followers", {}).get("total", 0))  # Convert to string
             external_urls = user_profile.get("external_urls", {}).get("spotify")
             href = user_profile.get("href")
             uri = user_profile.get("uri")
@@ -206,12 +204,13 @@ def user_info_to_database(user_profile):
             info_users.append((id, username, email, display_name, country, product, images, followers, external_urls, href, uri, type))
 
             if info_users:
-                print("User Info to Insert: ", info_users)  
+                print("User Info to Insert: ", info_users)
 
-                cursor.executemany(
+                # Use asyncpg's execute method to insert the data
+                await db.executemany(
                     """
                     INSERT INTO users (id, username, email, display_name, country, product, images, followers, external_urls, href, uri, type) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)  
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)  
                     ON CONFLICT (id) DO UPDATE 
                     SET email = EXCLUDED.email, 
                         display_name = EXCLUDED.display_name, 
@@ -223,16 +222,14 @@ def user_info_to_database(user_profile):
                     """, 
                     info_users
                 )
-                
-                db.commit()
                 return info_users
             else:
                 print("No user data to insert.")
+                return None  # Explicitly return None if no data is found
 
     except Exception as e:
         print(f"Database insertion error: {e}")
-        db.rollback()
+        return None  # Ensure None is returned in case of failure
     
     finally:
-        cursor.close()
-        db.close()
+        await db.close()  # Close the connection asynchronously

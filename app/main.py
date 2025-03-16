@@ -178,16 +178,15 @@ async def get_spotify_user_profile(token):
 # 🎵 2️⃣ Fetch & Display Spotify Data
 # ---------------------------------------
 
-import asyncio
+import asyncio, asyncpg
 from concurrent.futures import ThreadPoolExecutor
-import traceback
+import traceback, os
 
 executor = ThreadPoolExecutor(max_workers=5)  # Use thread pool for DB calls
 
 @app.get("/dashboard")
 async def dashboard(request: Request, limit: int = 100, offset: int = 0):
     db = None
-    cursor = None
     try:
         token = request.session.get("spotify_token")
         user_id = request.session.get("user_id")
@@ -198,41 +197,36 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         # Fetch user profile
         try:
             user_profile = await get_spotify_user_profile(token)
-            print("Fetched Spotify User Profile:", user_profile)
             if not user_profile:
                 return {"error": "Failed to fetch user profile from Spotify."}
         except Exception as e:
             return {"error": f"An error occurred while fetching user profile: {str(e)}"}
 
-        # Save user data
-        user_data = user_info_to_database(user_profile)
-        user_id = user_data[0][0]
+        # Save user data to database
+        user_data = await user_info_to_database(user_profile)
+        user_id = user_data[0][0]  # Assuming the first element is user_id
         request.session["user_id"] = user_id
 
-        # Get DB connection
-        db = get_db_connection()
-        cursor = db.cursor()
+        # Connect to the database using asyncpg
+        db = await get_db_connection()
 
-        print(f"Cursor type: {type(cursor)}")
+        # Fetch data asynchronously
+        user_info = await get_user_info(user_id, db)
+        top_artist_list = await get_top_artists_db(user_id, db)
+        top_tracks_list = await get_top_tracks_db(user_id, db)
+        track_play_counts = await get_track_play_counts(user_id, db)
+        daily_play_count = await get_daily_play_counts(user_id, db)
+        total_play_count = await get_total_play_count(user_id, db)
+        total_play_today = await get_total_play_today(user_id, db)
+        total_listened_minutes, total_listened_hours = await get_total_listening_time(user_id, db)
+        daily_listening_time = await get_daily_listening_time(user_id, db)
+        top_genres = await get_top_genres(user_id, db)
+        listening_history = await complete_listening_history(user_id, db, limit, offset)
 
-        # Run sync database calls inside a thread executor
-        loop = asyncio.get_event_loop()
-        user_info = await loop.run_in_executor(executor, get_user_info, user_id, db)
-        top_artist_list = await loop.run_in_executor(executor, get_top_artists_db, user_id, db)
-        top_tracks_list = await loop.run_in_executor(executor, get_top_tracks_db, user_id, db)
-        track_play_counts = await loop.run_in_executor(executor, get_track_play_counts, user_id, db)
-        daily_play_count = await loop.run_in_executor(executor, get_daily_play_counts, user_id, db)
-        total_play_count = await loop.run_in_executor(executor, get_total_play_count, user_id, db)
-        total_play_today = await loop.run_in_executor(executor, get_total_play_today, user_id, db)
-        total_listened_minutes, total_listened_hours = await loop.run_in_executor(
-            executor, get_total_listening_time, user_id, db
-        )
-        daily_listening_time = await loop.run_in_executor(executor, get_daily_listening_time, user_id, db)
-
-        print("Daily Listening Time:", daily_listening_time)
-
-        top_genres = await loop.run_in_executor(executor, get_top_genres, user_id, db)
-        listening_history = await loop.run_in_executor(executor, complete_listening_history, user_id, db, limit, offset)
+        # Update music data asynchronously
+        await update_user_music_data(user_id, token, "top_artists", time_range="medium_term")
+        await update_user_music_data(user_id, token, "top_tracks", time_range="medium_term")
+        await update_user_music_data(user_id, token, "recent_tracks", time_range="short_term")
 
         # Get currently playing track (Spotify API is async, so no need for executor)
         playing_now_data = await get_current_playing(token)
@@ -240,19 +234,20 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
             playing_now_data = {"track_name": "N/A", "artist_name": "N/A", "album_image_url": "N/A"}
 
     except Exception as e:
-        print(f"Error fetching dashboard data: {str(e)}")
-        print("Detailed traceback:")
-        traceback.print_exc()  # This will print the full traceback to the console
-
+        # Capture the traceback as well
+        error_message = str(e)
+        error_traceback = traceback.format_exc()  # Get the full traceback
+        
+        print(f"Error fetching dashboard data: {error_message}")
+        print(f"Traceback:\n{error_traceback}")
+        
         return {"error": "There was an issue fetching data. Please try again later."}
 
     finally:
-        if cursor:
-            cursor.close()
         if db:
-            db.close()
+            await db.close()
 
-    # Render dashboard template
+    # Prepare context for rendering
     context = {
         "request": request,
         "user_id": user_id,
@@ -266,7 +261,7 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         "total_listened_minutes": total_listened_minutes,
         "total_listened_hours": total_listened_hours,
         "daily_listening_time": daily_listening_time,
-        "user_image": user_info[0] if user_info else None,
+        "user_image": user_info[7] if user_info else None,
         "user_name": user_info[1] if user_info else "Unknown User",
         "track_name": playing_now_data.get("track_name"),
         "artist_name": playing_now_data.get("artist_name"),
@@ -275,6 +270,7 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
     }
 
     return templates.TemplateResponse("dashboard.html", context)
+
 
 
 

@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 SPOTIFY_API_URL = "https://api.spotify.com/v1"
 
-async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name: str = ""):  # Added method_name
+async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name: str = ""):
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient() as client:
         for attempt in range(retries):
@@ -17,9 +17,13 @@ async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name
                 json_response = response.json()  # No need to await here
                 print(f"{method_name} - JSON Response:", json_response)  # Debugging line
                 return json_response  # Return the JSON response directly
+            elif response.status_code == 204:  # Handle No Content (currently no track playing)
+                print(f"{method_name} - No track currently playing.")
+                return None  # Return None for no track playing
             else:
                 raise HTTPException(status_code=response.status_code, detail=f"Error in {method_name}: {response.text}")
     raise HTTPException(status_code=500, detail=f"Failed in {method_name} after multiple attempts.")
+
 
 
 
@@ -82,8 +86,7 @@ async def get_spotify_user_profile(token: str):
 
 
 async def get_now_playing(token: str):
-    url = f"{SPOTIFY_API_URL}/me/player/currently-playing"
-    data = await fetch_spotify_data(url, token, method_name="get_now_playing")
+    data = await fetch_spotify_data(f"{SPOTIFY_API_URL}/me/player/currently-playing", token, method_name="get_now_playing")
     
     if data is None:
         # No track is currently playing

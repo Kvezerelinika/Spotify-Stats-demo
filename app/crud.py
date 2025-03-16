@@ -3,38 +3,43 @@ import json, asyncpg
 from datetime import datetime
 import psycopg2  # Assuming you are using PostgreSQL
 
-async def top_artists_to_database(top_artists, user_id):
-    db = await get_db_connection()
-    cursor = await db.cursor()
-
+async def top_artists_to_database(top_artists, user_id, time_range):
+    db = await get_db_connection()  # Using asyncpg for async connection
+    if db is None:
+        print("Failed to connect to the database.")
+        return
+    
     try:
-        top_artist = []
-        for index, artist in enumerate(top_artists["items"]):
-            artist_id = artist["id"]
-            artist_name = artist["name"]
-            spotify_url = artist["external_urls"]["spotify"]
-            followers = artist.get("followers", {}).get("total", 0)
-            genres = ", ".join(artist.get("genres")) if artist.get("genres") else None
-            image_url = artist["images"][0]["url"] if artist["images"] else None
-            rank = index + 1
-            uri = artist["uri"]
+        async with db.transaction():  # Use async transaction for better concurrency handling
+            top_artist = []
+            for index, artist in enumerate(top_artists["items"]):
+                artist_id = artist["id"]
+                artist_name = artist["name"]
+                spotify_url = artist["external_urls"]["spotify"]
+                followers = artist.get("followers", {}).get("total", 0)
+                genres = ", ".join(artist.get("genres")) if artist.get("genres") else None
+                image_url = artist["images"][0]["url"] if artist["images"] else None
+                rank = index + 1
+                uri = artist["uri"]
 
-            top_artist.append((user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri))
+                top_artist.append((user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri))
 
-        if top_artist:
-            await cursor.executemany("INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (USER_ID, artist_id) DO UPDATE SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url, rank = EXCLUDED.rank", top_artist)
-        else:
-            print("No new top artists to add.")
-
-        db.commit()
-
+            if top_artist:
+                await db.executemany(
+                    "INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) "
+                    "ON CONFLICT (user_id, artist_id) DO UPDATE "
+                    "SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url, rank = EXCLUDED.rank", 
+                    top_artist
+                )
+            else:
+                print("No new top artists to add.")
+        
     except Exception as e:
         print(f"Database insertion error in top_artists_to_database: {e}")
-        db.rollback()
-    
     finally:
-        cursor.close()
-        db.close()
+        await db.close()  # Close the connection when done
+
 
 
 async def recents_to_database(recent_tracks, user_id):   
@@ -42,14 +47,13 @@ async def recents_to_database(recent_tracks, user_id):
     print("Recent tracks data received:", recent_tracks)  # Debugging line
 
     db = await get_db_connection()
-    cursor = await db.cursor()
 
     try:
         recent_records = []
         for item in recent_tracks.get("items", []):
             track = item.get("track", {})
 
-            # Get duration_ms directly from the track object since it's already available
+            # Get track details
             track_id = track.get("id")
             track_name = track.get("name")
             artist_id = track.get("artists", [{}])[0].get("id")
@@ -66,42 +70,42 @@ async def recents_to_database(recent_tracks, user_id):
                 print(f"Skipping invalid timestamp: {item['played_at']}")
                 continue
 
-            # Add duration_ms to the record tuple
+            # Add record to list
             recent_records.append((
                 user_id, track_id, track_name, artist_id, artist_name, 
                 album_name, album_image_url, played_at, duration_ms
             ))
 
         if recent_records:
-            await cursor.executemany(
+            # Execute the insert query directly
+            await db.executemany(
                 """
                 INSERT INTO listening_history 
                 (user_id, track_id, track_name, artist_id, artist_name, 
                 album_name, album_image_url, played_at, duration_ms)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (user_id, played_at)
                 DO UPDATE SET album_image_url = EXCLUDED.album_image_url
                 WHERE listening_history.album_image_url != EXCLUDED.album_image_url
                 """,
                 recent_records
             )
-            await db.commit()
             print(f"Successfully inserted {len(recent_records)} records")
         else:
             print("No new tracks played.")
 
     except psycopg2.Error as e:
         print(f"Database error in recents_to_database: {e}")
-        db.rollback()
+        await db.rollback()  # Ensure rollback in case of an error
     
     finally:
-        await cursor.close()
-        await db.close()
+        await db.close()  # Ensure connection is closed after the operation
 
 
-async def top_tracks_to_database(top_tracks, user_id):
-    db = await get_db_connection()
-    cursor = await db.cursor()
+
+
+async def top_tracks_to_database(top_tracks, user_id, time_range):
+    db = await get_db_connection()  # ✅ Await the async function
 
     try:
         top_records = []
@@ -114,7 +118,18 @@ async def top_tracks_to_database(top_tracks, user_id):
             album_id = track["album"]["id"] 
             album_name = track["album"]["name"]
             album_image_url = track["album"]["images"][0]["url"] if track["album"]["images"] else None
-            release_date = track["album"]["release_date"]
+            
+            # ✅ Convert release_date to a proper datetime.date object
+            release_date_str = track["album"]["release_date"]
+            if len(release_date_str) == 10:  # Format: YYYY-MM-DD
+                release_date = datetime.datetime.strptime(release_date_str, "%Y-%m-%d").date()
+            elif len(release_date_str) == 7:  # Format: YYYY-MM (some Spotify data)
+                release_date = datetime.datetime.strptime(release_date_str, "%Y-%m").date()
+            elif len(release_date_str) == 4:  # Format: YYYY
+                release_date = datetime.date(int(release_date_str), 1, 1)  # Default to January 1st
+            else:
+                release_date = None  # Handle unexpected formats safely
+
             duration_ms = track["duration_ms"]
             is_explicit = track["explicit"]
             spotify_url = track["external_urls"]["spotify"]
@@ -124,19 +139,28 @@ async def top_tracks_to_database(top_tracks, user_id):
             top_records.append((user_id, track_id, track_name, artist_id, artist_name, album_id, album_name, album_image_url, release_date, duration_ms, is_explicit, spotify_url, popularity, rank))
 
         if top_records:
-            await cursor.executemany("INSERT INTO top_tracks (user_id, track_id, track_name, artist_id, artist_name, album_id, album_name, album_image_url, release_date, duration_ms, is_explicit, spotify_url, popularity, rank) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (user_id, track_id) DO UPDATE SET rank = EXCLUDED.rank", top_records)
+            query = """
+                INSERT INTO top_tracks 
+                (user_id, track_id, track_name, artist_id, artist_name, album_id, album_name, 
+                 album_image_url, release_date, duration_ms, is_explicit, spotify_url, popularity, rank) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
+                ON CONFLICT (user_id, track_id) 
+                DO UPDATE SET rank = EXCLUDED.rank
+            """
+
+            async with db.transaction():  # ✅ Use transaction context instead of manual rollback
+                await db.executemany(query, top_records)
+
         else:
-            print("There is no top tracks for this user")
-        
-        db.commit()
+            print("There are no top tracks for this user")
 
     except Exception as e:
-        print(f"Database insertion error crud.py top_tracks_to_database: {e}")
-        db.rollback()
-    
+        print(f"Database insertion error in crud.py top_tracks_to_database: {e}")
+
     finally:
-        cursor.close()
-        db.close()
+        await db.close()  # ✅ Close connection
+
+
 
 
 async def all_albums_to_database(all_albums):
