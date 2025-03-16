@@ -114,11 +114,8 @@ async def get_current_playing(token):
     #data = cursor.fetchone()
     #return {"track_name": data[0], "artist_name": data[1], "album_image_url": data[2]} if data else {}
 
-    # Get the current track and artist data from the Spotify API
-    now_playing_data = await get_now_playing(token)
-
     # Return the data directly (FastAPI will handle the JSON conversion automatically)
-    return now_playing_data
+    return await get_now_playing(token)  # ✅ FIXED: Returns the actual data
 
 
 #SUM of the listening minutes and hours for entire history
@@ -137,11 +134,11 @@ def get_total_listening_time(user_id, db):
 
 #listening minutes and hours for today
 def get_total_listening_time_today(user_id, db):
+    # Create a cursor from the database connection
+    cursor = db.cursor()
     if not hasattr(db, "cursor"):
         raise ValueError("Invalid database connection object")
     
-    # Create a cursor from the database connection
-    cursor = db.cursor()
     print(f"Cursor type: {type(cursor)}")
 
     today = datetime.today().date()
@@ -154,6 +151,9 @@ def get_total_listening_time_today(user_id, db):
 import psycopg2
 
 def get_daily_listening_time(user_id, db):
+    if db is None:
+        raise ValueError("Database connection is None. Check get_db_connection()!")
+    
     cursor = db.cursor()
     if not hasattr(cursor, "execute"):
         raise ValueError("Invalid cursor object")
@@ -195,25 +195,25 @@ def group_by_time_period(records):
     
     return time_groups
 
-def complete_listening_history(user_id, db, limit=100, offset=0):
+def complete_listening_history(user_id, db, limit, offset):
     cursor = db.cursor()
-    if not hasattr(cursor, "execute"):
-        raise ValueError("Invalid cursor object")
-
-    print(f"Cursor type: {type(cursor)}")
 
     cursor.execute("""
-        SELECT track_name, artist_name, album_name, album_image_url, played_at
-        FROM listening_history
-        WHERE user_id = %s
-        ORDER BY played_at DESC
-        LIMIT %s OFFSET %s
+        SELECT played_at, track_name, artist_name, duration_ms
+        FROM listening_history 
+        WHERE user_id = %s 
+        ORDER BY played_at DESC 
+        LIMIT %s OFFSET %s;
     """, (user_id, limit, offset))
-    
+
     records = cursor.fetchall()
-    grouped_records = group_by_time_period(records)
+
+    # Convert tuples to dictionaries
+    column_names = [desc[0] for desc in cursor.description]
+    records = [dict(zip(column_names, row)) for row in records]
     cursor.close()
-    return grouped_records
+    return group_by_time_period(records)  # Now records are dictionaries
+
 
 
 def get_top_genres(user_id, db):
@@ -225,16 +225,20 @@ def get_top_genres(user_id, db):
 
     genres_count = {}
     cursor.execute("""SELECT genres FROM users_top_artists WHERE user_id = %s;""", (user_id,))
-    artist_genres = cursor.fetchall()  # List of tuples, e.g., [("rock, pop",), ("jazz",), ("pop, hip-hop",)]
+    artist_genres = cursor.fetchall()  # List of tuples
 
     for row in artist_genres:
-        genre_list = row[0].split(", ")  # Convert "rock, pop" → ["rock", "pop"]
-        for genre in genre_list:
-            genres_count[genre] = genres_count.get(genre, 0) + 1
+        if row[0]:  # Skip None values
+            genre_list = row[0].split(", ")  # Convert "rock, pop" → ["rock", "pop"]
+            for genre in genre_list:
+                genres_count[genre] = genres_count.get(genre, 0) + 1
+
     # Sort by count (highest first) and take top 20
     top_genres = sorted(genres_count.items(), key=lambda x: x[1], reverse=True)[:20]
+
     cursor.close()
     return top_genres
+
 
 
 

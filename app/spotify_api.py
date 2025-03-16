@@ -14,12 +14,14 @@ async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name
                 print(f"Rate limit hit in {method_name}. Retrying after {retry_after} seconds...")
                 await asyncio.sleep(retry_after)
             elif response.status_code == 200:
-                json_response = await response.json()
+                json_response = response.json()  # No need to await here
                 print(f"{method_name} - JSON Response:", json_response)  # Debugging line
-                return await response.json()
+                return json_response  # Return the JSON response directly
             else:
                 raise HTTPException(status_code=response.status_code, detail=f"Error in {method_name}: {response.text}")
     raise HTTPException(status_code=500, detail=f"Failed in {method_name} after multiple attempts.")
+
+
 
 
 async def get_top_artists(token: str, time_range: str):
@@ -83,7 +85,15 @@ async def get_now_playing(token: str):
     url = f"{SPOTIFY_API_URL}/me/player/currently-playing"
     data = await fetch_spotify_data(url, token, method_name="get_now_playing")
     
-    # Check if there is currently a track playing
+    if data is None:
+        # No track is currently playing
+        return {
+            "track_name": None,
+            "artists": None,
+            "album_image_url": None
+        }
+    
+    # If data is present, proceed as usual
     if data.get('is_playing', False):
         track_name = data['item']['name']
         artists = [artist['name'] for artist in data['item']['artists']]

@@ -227,11 +227,11 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         total_listened_minutes, total_listened_hours = await loop.run_in_executor(
             executor, get_total_listening_time, user_id, db
         )
-        daily_listening_time = await loop.run_in_executor(executor, get_daily_listening_time, user_id, cursor)
+        daily_listening_time = await loop.run_in_executor(executor, get_daily_listening_time, user_id, db)
 
         print("Daily Listening Time:", daily_listening_time)
 
-        top_genres = await loop.run_in_executor(executor, get_top_genres, user_id, top_artist_list)
+        top_genres = await loop.run_in_executor(executor, get_top_genres, user_id, db)
         listening_history = await loop.run_in_executor(executor, complete_listening_history, user_id, db, limit, offset)
 
         # Get currently playing track (Spotify API is async, so no need for executor)

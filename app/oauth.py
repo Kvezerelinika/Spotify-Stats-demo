@@ -32,7 +32,9 @@ SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")  # Make sure this is set in .env
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-SCOPES = "user-top-read user-read-recently-played"
+SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
+
+
 
 def get_spotify_login_url(request: Request):
     state = os.urandom(16).hex()
@@ -45,6 +47,7 @@ def get_spotify_login_url(request: Request):
         "state": state
     }
     return f"{SPOTIFY_AUTH_URL}?{urlencode(params)}"
+
 
 async def get_spotify_token(code: str, state: str, request: Request):
     # Check that the 'state' matches
@@ -177,18 +180,23 @@ def handle_spotify_callback(request: Request):
 
 def user_info_to_database(user_profile):
     db = get_db_connection()
+
+    if db is None:  # Check if connection failed
+        print("Database connection failed. Check get_db_connection()!")
+        return None
+    
     cursor = db.cursor()
 
     try:
         info_users = []
-        if isinstance(user_profile, dict):  # Check if user_profile is a dictionary
+        if isinstance(user_profile, dict):  
             id = user_profile.get("id")
             username = user_profile.get("display_name")
             email = user_profile.get("email", "unknown_email@example.com")
-            display_name = user_profile.get("display_name")  # Fixed incorrect usage
+            display_name = user_profile.get("display_name")
             country = user_profile.get("country")
             product = user_profile.get("product")
-            images = user_profile.get("images", [{}])[0].get("url")  # Fixed potential KeyError
+            images = user_profile.get("images", [{}])[0].get("url")
             followers = user_profile.get("followers", {}).get("total", 0)
             external_urls = user_profile.get("external_urls", {}).get("spotify")
             href = user_profile.get("href")
@@ -198,8 +206,8 @@ def user_info_to_database(user_profile):
             info_users.append((id, username, email, display_name, country, product, images, followers, external_urls, href, uri, type))
 
             if info_users:
-                print("User Info to Insert: ", info_users)  # Debugging before inserting into DB
-                
+                print("User Info to Insert: ", info_users)  
+
                 cursor.executemany(
                     """
                     INSERT INTO users (id, username, email, display_name, country, product, images, followers, external_urls, href, uri, type) 
@@ -216,12 +224,10 @@ def user_info_to_database(user_profile):
                     info_users
                 )
                 
-                db.commit()  # Ensure the changes are committed
+                db.commit()
                 return info_users
             else:
                 print("No user data to insert.")
-        else:
-            print("Error: user_profile is not a dictionary")
 
     except Exception as e:
         print(f"Database insertion error: {e}")
