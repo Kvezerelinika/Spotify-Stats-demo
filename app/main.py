@@ -1,12 +1,10 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request, Query, HTTPException, UploadFile, File
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 import time, asyncio, zipfile, json, logging
 from io import BytesIO
-from fastapi import UploadFile, File
-from fastapi.responses import HTMLResponse
 
 
 # Import Spotify helper functions
@@ -264,7 +262,7 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         "user_image": user_info[7] if user_info else None,
         "user_name": user_info[1] if user_info else "Unknown User",
         "track_name": playing_now_data.get("track_name"),
-        "artist_name": playing_now_data.get("artist_name"),
+        "artist_name": playing_now_data.get("artists"),
         "album_img": playing_now_data.get("album_image_url"),
         "listening_history": listening_history,
     }
@@ -300,54 +298,6 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
     #if track_ids:  # Ensure there are tracks before calling API
         #track_data = get_track(token, track_ids)  # Fetch in batches
         #all_artist_id_and_image_url_into_database(track_data, user_id) 
-
-from fastapi import Query
-
-@app.get("/fetch-tab-data")
-async def fetch_tab_data(request: Request, tab: str = Query(...)):
-    token = request.session.get("spotify_token")
-    user_id = request.session.get("user_id")
-
-    if not token or not user_id:
-        return {"error": "User not authenticated"}
-
-    db = get_db_connection()
-    cursor = db.cursor()
-
-    try:
-        if tab == "tab1":  # Dashboard
-            top_artists = get_top_artists_db(user_id, db)
-            return {"top_artists": top_artists}
-
-        elif tab == "tab2":  # Daily Plays
-            daily_play_counts = get_daily_play_counts(user_id, db)
-            return {"daily_play_counts": daily_play_counts}
-
-        elif tab == "tab3":  # Top Genres
-            top_artist_list = get_top_artists_db(user_id, db)
-            top_genres = get_top_genres(user_id, top_artist_list)
-            return {"top_genres": top_genres}
-
-        elif tab == "tab4":  # Top Tracks
-            top_tracks_list = get_top_tracks_db(user_id, db)
-            return {"top_tracks": top_tracks_list}
-
-        elif tab == "tab5":  # Total Time
-            total_listened_minutes, total_listened_hours = get_total_listening_time(user_id, db)
-            return {
-                "total_listened_minutes": total_listened_minutes,
-                "total_listened_hours": total_listened_hours
-            }
-
-        return {"error": "Invalid tab"}
-
-    except Exception as e:
-        print(f"Error fetching data for {tab}: {e}")
-        return {"error": "Internal server error"}
-
-    finally:
-        cursor.close()
-        db.close()
 
 
 

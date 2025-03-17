@@ -5,82 +5,83 @@
 {% endblock %}
 
 {% block main %}
-
-<script>
-function showTab(tabId) {
-    // Hide all tab content
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.style.display = 'none';
-    });
-
-    // Show the selected tab
-    document.getElementById(tabId).style.display = 'block';
-}
-</script>
 <script>
     let offset = 0;
-let limit = 100;
+    let limit = 100;
 
-async function fetchListeningHistory() {
-    try {
-        let response = await fetch(`/api/listening-history?limit=${limit}&offset=${offset}`);
-        let data = await response.json();
+    async function fetchListeningHistory() {
+        try {
+            let response = await fetch(`/api/listening-history?limit=${limit}&offset=${offset}`);
+            let data = await response.json();
 
-        // Add the new tracks to the DOM
-        displayListeningHistory(data);
-        
-        offset += limit;
-    } catch (error) {
-        console.error("Error fetching data: ", error);
+            // Add the new tracks to the DOM
+            displayListeningHistory(data);
+            
+            offset += limit;
+        } catch (error) {
+            console.error("Error fetching data: ", error);
+        }
     }
-}
 
-function displayListeningHistory(data) {
-    for (const period in data) {
-        const periodList = document.getElementById(`${period.toLowerCase().replace(" ", "-")}-list`);
-        
-        // Clear existing content
-        periodList.innerHTML = '';
+    function displayListeningHistory(data) {
+        for (const period in data) {
+            const periodList = document.getElementById(`${period.toLowerCase().replace(" ", "-")}-list`);
+            
+            // Clear existing content
+            periodList.innerHTML = '';
 
-        // Display the tracks for each period
-        data[period].forEach(track => {
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <img src="${track.album_image_url}" alt="${track.album_name}" />
-                <strong>${track.track_name}</strong> by ${track.artist_name}
-                <span>${track.played_at}</span>
-            `;
-            periodList.appendChild(li);
+            // Display the tracks for each period
+            data[period].forEach(track => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <img src="${track.album_image_url}" alt="${track.album_name}" />
+                    <strong>${track.track_name}</strong> by ${track.artist_name}
+                    <span>${track.played_at}</span>
+                `;
+                periodList.appendChild(li);
+            });
+        }
+    }
+
+    // Search by date functionality
+    document.getElementById("search-btn").addEventListener("click", () => {
+        const selectedDate = document.getElementById("date-search").value;
+        fetchListeningHistoryByDate(selectedDate);
+    });
+
+    async function fetchListeningHistoryByDate(date) {
+        try {
+            let response = await fetch(`/api/listening-history?date=${date}`);
+            let data = await response.json();
+            
+            displayListeningHistory(data);
+        } catch (error) {
+            console.error("Error fetching data: ", error);
+        }
+    }
+
+    // Handle "More" button click
+    document.getElementById("more-btn").addEventListener("click", fetchListeningHistory);
+
+    // Initial fetch
+    fetchListeningHistory();
+
+    // Function to show the selected tab content
+    function showTab(tabName) {
+        // Hide all tab contents
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.style.display = 'none';
         });
+
+        // Show the selected tab content
+        document.getElementById(tabName).style.display = 'block';
     }
-}
 
-// Search by date functionality
-document.getElementById("search-btn").addEventListener("click", () => {
-    const selectedDate = document.getElementById("date-search").value;
-    fetchListeningHistoryByDate(selectedDate);
-});
-
-async function fetchListeningHistoryByDate(date) {
-    try {
-        let response = await fetch(`/api/listening-history?date=${date}`);
-        let data = await response.json();
-        
-        displayListeningHistory(data);
-    } catch (error) {
-        console.error("Error fetching data: ", error);
-    }
-}
-
-// Handle "More" button click
-document.getElementById("more-btn").addEventListener("click", fetchListeningHistory);
-
-// Initial fetch
-fetchListeningHistory();
-
+    // Set the default tab to be shown
+    document.addEventListener('DOMContentLoaded', function() {
+        showTab('dashboard');
+    });
 </script>
-
-
 
 <div class="container mt-5 text-center text-white">
     <!-- Profile Picture with Black Stroke Border -->
@@ -111,267 +112,212 @@ fetchListeningHistory();
     </div>
 </div>
 
-
-<div class="now-playing">
-    <img src="{{ album_img }}" alt="Album Image">
-    <div class="text-container">
-        <span class="title">Now Playing:</span>
-        <span class="number">{{ track_name }} by {{ artist_name }}</span>
-    </div>
-</div>
-
-    
-{% if playing_now_data %}
-    {% if playing_now_data.track_name %}
+{% if track_name %}
     <div class="now-playing">
-        <img src="{{ playing_now_data.album_image_url }}" alt="Album Image">
+        <img src="{{ album_img }}" alt="Album Image">
         <div class="text-container">
             <span class="title">Now Playing:</span>
-            <span class="number">{{ playing_now_data.track_name }} by {{ playing_now_data.artists }}</span>
+            <span class="number">{{ track_name }} by {{ artist_name }}</span>
         </div>
     </div>
-    {% else %}
-        <p>No track is currently playing.</p>
-    {% endif %}
 {% else %}
-    <p>No track data available.</p>
+    <p>No track is currently playing.</p>
 {% endif %}
 
+<!-- Sidebar -->
+<div class="sidebar">
+    <a href="#tab1" onclick="refreshDashboardData()">DASHBOARD</a> <!-- Add onclick event -->
+    <a href="#tab2" onclick="showTab('daily-plays')">DAILY PLAYS</a>
+    <a href="#tab3" onclick="showTab('top-genres')">TOP GENRES</a>
+    <a href="#tab4" onclick="showTab('top-tracks')">TOP TRACKS</a>
+    <a href="#tab5" onclick="showTab('total-time')">TOTAL TIME</a>
+</div>
 
-
-
-
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <a href="#tab1">DASHBOARD</a>
-        <a href="#tab2">DAILY PLAYS</a>
-        <a href="#tab3">TOP GENRES</a>
-        <a href="#tab4">TOP TRACKS</a>
-        <a href="#tab5">TOTAL TIME</a>
-    </div>
-
-
-        <!-- Sidebar -->
-    <div class="sidebar">
-        <a href="#" onclick="showTab('dashboard')">DASHBOARD</a>
-        <a href="#" onclick="showTab('daily-plays')">DAILY PLAYS</a>
-        <a href="#" onclick="showTab('top-genres')">TOP GENRES</a>
-        <a href="#" onclick="showTab('top-tracks')">TOP TRACKS</a>
-        <a href="#" onclick="showTab('total-time')">TOTAL TIME</a>
-    </div>
-
-    <!-- Main Content Area -->
-    <div class="content">
-        <div id="dashboard" class="tab-content">Dashboard Content Here</div>
-        <div id="daily-plays" class="tab-content" style="display: none;">Daily Plays Content Here</div>
-        <div id="top-genres" class="tab-content" style="display: none;">Top Genres Content Here</div>
-        <div id="top-tracks" class="tab-content" style="display: none;">Top Tracks Content Here</div>
-        <div id="total-time" class="tab-content" style="display: none;">Total Time Content Here</div>
-    </div>
-
-
-
-    <!-- Content Area -->
-    <div class="content">
-        <div class="tab-content" id="tab1">
-            <h2>DASHBOARD</h2>
-            <div class="top-sections-container">
-                <div class="container-top-artists">
-                    {% if top_artist_list %}
-                        <div class="card bg-dark text-white">
-                            <div class="card-body">
-                                <h2>Your Top Artists</h2>
-                                <div class="artist-list">
-                                    {% for artist in top_artist_list %}
-                                        <div class="artist-item">
-                                            <a href="{{ artist[2] }}" target="_blank">
-                                            <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
-                                            <span class="artist-name">{{ artist[0] }}</span>
-                                            </a>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+<div class="content">
+    <div id="dashboard" class="tab-content">
+        <h2>DASHBOARD</h2>
+        <div class="top-sections-container">
+            <div class="container-top-artists">
+                {% if top_artist_list %}
+                    <div class="card bg-dark text-white">
+                        <div class="card-body">
+                            <h2>Your Top Artists</h2>
+                            <div class="artist-list">
+                                {% for artist in top_artist_list %}
+                                    <div class="artist-item">
+                                        <a href="{{ artist[2] }}" target="_blank">
+                                        <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
+                                        <span class="artist-name">{{ artist[0] }}</span>
+                                        </a>
+                                    </div>
+                                {% endfor %}
                             </div>
                         </div>
-                    {% else %}
-                        <p>No data available. Try logging in with Spotify.</p>
-                    {% endif %}
-                </div>
-            
-                <div class="container-top-tracks">
-                    {% if top_tracks_list %}
-                        <div class="card bg-dark text-white">
-                            <div class="card-body">
-                                <h2>Your Top Tracks</h2>
-                                <div class="artist-list">
-                                    {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
-                                        <div class="artist-item">
-                                            <a href="{{ spotify_url }}" target="_blank">
-                                            <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
-                                            <span class="artist-name">{{ track_name }} by {{ artist_name }}</span>
-                                            </a>
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                    </div>
+                {% else %}
+                    <p>No data available. Try logging in with Spotify.</p>
+                {% endif %}
+            </div>
+        
+            <div class="container-top-tracks">
+                {% if top_tracks_list %}
+                    <div class="card bg-dark text-white">
+                        <div class="card-body">
+                            <h2>Your Top Tracks</h2>
+                            <div class="artist-list">
+                                {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
+                                    <div class="artist-item">
+                                        <a href="{{ spotify_url }}" target="_blank">
+                                        <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
+                                        <span class="artist-name">{{ track_name }} by {{ artist_name }}</span>
+                                        </a>
+                                    </div>
+                                {% endfor %}
                             </div>
                         </div>
-                    {% else %}
-                        <p>No data available for top tracks.</p>
-                    {% endif %}
-                </div>
+                    </div>
+                {% else %}
+                    <p>No data available for top tracks.</p>
+                {% endif %}
             </div>
         </div>
-
-        <div class="tab-content" id="tab2">
-            <h2>DAILY PLAYS</h2>
-
-
-
-            <!-- Display the listening history grouped by time periods -->
-<div id="listening-history">
-    <div id="today">
-        <h3>Today</h3>
-        <ul id="today-list"></ul>
-    </div>
-    <div id="yesterday">
-        <h3>Yesterday</h3>
-        <ul id="yesterday-list"></ul>
-    </div>
-    <div id="this-week">
-        <h3>This Week</h3>
-        <ul id="this-week-list"></ul>
-    </div>
-    <div id="last-week">
-        <h3>Last Week</h3>
-        <ul id="last-week-list"></ul>
-    </div>
-    <div id="this-month">
-        <h3>This Month</h3>
-        <ul id="this-month-list"></ul>
-    </div>
-    <div id="older">
-        <h3>Older</h3>
-        <ul id="older-list"></ul>
     </div>
 
-    <!-- More button -->
-    <button id="more-btn">More</button>
-</div>
-
-<!-- Calendar for date search -->
-<input type="date" id="date-search" />
-<button id="search-btn">Search</button>
-
-            
-<div class="play-counts">
-    {% if track_play_counts %}
-        <h2>Your TOP played song count</h2>
-            {% for track in track_play_counts %}
-                <img src="{{ track[2] }}" alt="{{ track[2] }}">
-                <strong>{{ track[0] }} by {{ track[1] }}</strong>
-                <br>
-                Played {{ track[3] }} times
-            {% endfor %}
-    {% else %}
-        <p>No data available. Try logging in with Spotify.</p>
-    {% endif %}
-</div>
-
-
-
-<div>
-        <h2>Your Recently Played Songs</h2>
-    {% if track_play_counts %}
-        <ul>
-        {% for track in track_play_counts %}
-            <li>
-                <strong>{{ track[0] }} by {{ track[1] }}</strong>  <!-- Track Name (track[0]), Artist Name (track[1]) -->
-                <br>
-                Played {{ track[2] }} times  <!-- track is a tuple (track_name, artist_name, play_count), track[2] extracts the play count -->
-            </li>
-        {% endfor %}
-        </ul>
-    {% else %}
-        <p>No recent tracks found. Try playing some music on Spotify.</p>
-    {% endif %}
-</div>
-
-    
-    <h2>Total Plays Per Day</h2>
-    {% if daily_play_counts %}
-        <ul>
-        {% for play_date, count in daily_play_counts %}
-            <li>{{ play_date }}: {{ count }} listens</li>
-        {% endfor %}
-        </ul>
-    {% else %}
-        <p>No data available for daily plays.</p>
-    {% endif %}
-
-
-    <h2>Total listen count</h2>
-        {% if total_play_count %}   
-        <ul>
-            <li>{{ total_play_count }}</li>
-        </ul>
+    <div id="daily-plays" class="tab-content" style="display: none;">
+        <h2>DAILY PLAYS</h2>
+        <div id="listening-history">
+            <div id="today">
+                <h3>Today</h3>
+                <ul id="today-list"></ul>
+            </div>
+            <div id="yesterday">
+                <h3>Yesterday</h3>
+                <ul id="yesterday-list"></ul>
+            </div>
+            <div id="this-week">
+                <h3>This Week</h3>
+                <ul id="this-week-list"></ul>
+            </div>
+            <div id="last-week">
+                <h3>Last Week</h3>
+                <ul id="last-week-list"></ul>
+            </div>
+            <div id="this-month">
+                <h3>This Month</h3>
+                <ul id="this-month-list"></ul>
+            </div>
+            <div id="older">
+                <h3>Older</h3>
+                <ul id="older-list"></ul>
+            </div>
+            <button id="more-btn">More</button>
+        </div>
+        <input type="date" id="date-search" />
+        <button id="search-btn">Search</button>
+        
+        <div class="play-counts">
+            {% if track_play_counts %}
+                <h2>Your TOP played song count</h2>
+                {% for track in track_play_counts %}
+                    <img src="{{ track[2] }}" alt="{{ track[2] }}">
+                    <strong>{{ track[0] }} by {{ track[1] }}</strong>
+                    <br>
+                    Played {{ track[3] }} times
+                {% endfor %}
             {% else %}
-                <p>No data available for total plays.</p>
+                <p>No data available. Try logging in with Spotify.</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <h2>Your Recently Played Songs</h2>
+            {% if track_play_counts %}
+                <ul>
+                {% for track in track_play_counts %}
+                    <li>
+                        <strong>{{ track[0] }} by {{ track[1] }}</strong>
+                        <br>
+                        Played {{ track[2] }} times
+                    </li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>No recent tracks found. Try playing some music on Spotify.</p>
+            {% endif %}
+        </div>
+
+        <h2>Total Plays Per Day</h2>
+        {% if daily_play_counts %}
+            <ul>
+            {% for play_date, count in daily_play_counts %}
+                <li>{{ play_date }}: {{ count }} listens</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p>No data available for daily plays.</p>
         {% endif %}
 
-        </div>
-
-        <div class="tab-content" id="tab3">
-            <h2>TOP GENRES</h2>
-            {% if top_genres %}
-                <ul>
-                    {% for genre, count in top_genres %}
-                        <li>{{ genre }}: {{ count }} listens</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>No data available for top genres.</p>
-            {% endif %}
-        </div>
-        
-
-        <div class="tab-content" id="tab4">
-            <h2>TOP TRACKS</h2>
-            {% if top_tracks_list %}
-                <ul>
-                    {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}  <!-- Track Name, Artist Name, Popularity -->
-                        <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                        <p>No data available for top tracks.</p>
-            {% endif %}
-        </div>
-
-        <div class="tab-content" id="tab5">
-            <h2>TOTAL TIME</h2>
-            <h2>Total listened time</h2>
-            {% if total_listened_minutes or total_listened_hours %}
-                <ul>
-                    <li>{{ total_listened_minutes }} minutes | {{ total_listened_hours }} hours</li>
-                </ul>
-            {% else %}
-                <p>No data available for total listened time.</p>
-            {% endif %}    
-        
-            <h2>Total listened minutes and hours</h2>
-            {% if daily_listening_time %}
-                <ul>
-                    {% for day in daily_listening_time %}
-                        {% set hours = day[1] // 60 %}
-                        {% set minutes = day[1] % 60 %}
-                        <li>{{ day[0] }}: {{ day[1] }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>No data available for total listened time.</p>
-            {% endif %}   
-        </div>
+        <h2>Total listen count</h2>
+        {% if total_play_count %}   
+            <ul>
+                <li>{{ total_play_count }}</li>
+            </ul>
+        {% else %}
+            <p>No data available for total plays.</p>
+        {% endif %}
     </div>
+
+    <div id="top-genres" class="tab-content" style="display: none;">
+        <h2>TOP GENRES</h2>
+        {% if top_genres %}
+            <ul>
+                {% for genre, count in top_genres %}
+                    <li>{{ genre }}: {{ count }} listens</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No data available for top genres.</p>
+        {% endif %}
+    </div>
+
+    <div id="top-tracks" class="tab-content" style="display: none;">
+        <h2>TOP TRACKS</h2>
+        {% if top_tracks_list %}
+            <ul>
+                {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
+                    <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No data available for top tracks.</p>
+        {% endif %}
+    </div>
+
+    <div id="total-time" class="tab-content" style="display: none;">
+        <h2>TOTAL TIME</h2>
+        <h2>Total listened time</h2>
+        {% if total_listened_minutes or total_listened_hours %}
+            <ul>
+                <li>{{ total_listened_minutes }} minutes | {{ total_listened_hours }} hours</li>
+            </ul>
+        {% else %}
+            <p>No data available for total listened time.</p>
+        {% endif %}    
+        
+        <h2>Total listened minutes and hours</h2>
+        {% if daily_listening_time %}
+            <ul>
+                {% for day in daily_listening_time %}
+                    {% set hours = day[1] // 60 %}
+                    {% set minutes = day[1] % 60 %}
+                    <li>{{ day[0] }}: {{ day[1] }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No data available for total listened time.</p>
+        {% endif %}   
+    </div>
+</div>
 
 <!-- Minimal JavaScript to handle the active tab -->
 <script>
