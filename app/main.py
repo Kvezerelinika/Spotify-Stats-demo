@@ -220,6 +220,7 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         daily_listening_time = await get_daily_listening_time(user_id, db)
         top_genres = await get_top_genres(user_id, db)
         listening_history = await complete_listening_history(user_id, db, limit, offset)
+        records_by_time = await complete_listening_history(user_id, db, limit, offset)
 
         # Update music data asynchronously
         await update_user_music_data(user_id, token, "top_artists", time_range="medium_term")
@@ -265,9 +266,11 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         "artist_name": playing_now_data.get("artists"),
         "album_img": playing_now_data.get("album_image_url"),
         "listening_history": listening_history,
+        "records_by_time": records_by_time
     }
 
     return templates.TemplateResponse("dashboard.html", context)
+
 
 
 

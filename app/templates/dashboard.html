@@ -5,6 +5,28 @@
 {% endblock %}
 
 {% block main %}
+
+<script>
+document.getElementById('more-btn').addEventListener('click', function() {
+    // Fetch more records via AJAX (ensure that your server-side logic is set to handle this)
+    fetch('/get-more-history')  // Implement this route on the backend
+        .then(response => response.json())
+        .then(data => {
+            // Update the lists dynamically
+            for (const period in data) {
+                let listId = period.toLowerCase().replace(' ', '-') + '-list';
+                const listElement = document.getElementById(listId);
+                data[period].forEach(track => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `${track.track_name} by ${track.artist_name} - Played at ${track.played_at}`;
+                    listElement.appendChild(listItem);
+                });
+            }
+        });
+});
+</script>
+
+
 <script>
     let offset = 0;
     let limit = 100;
@@ -126,7 +148,7 @@
 
 <!-- Sidebar -->
 <div class="sidebar">
-    <a href="#tab1" onclick="refreshDashboardData()">DASHBOARD</a> <!-- Add onclick event -->
+    <a href="#tab1" onclick="showTab('dashboard')">DASHBOARD</a> <!-- Add onclick event -->
     <a href="#tab2" onclick="showTab('daily-plays')">DAILY PLAYS</a>
     <a href="#tab3" onclick="showTab('top-genres')">TOP GENRES</a>
     <a href="#tab4" onclick="showTab('top-tracks')">TOP TRACKS</a>
@@ -183,68 +205,110 @@
         </div>
     </div>
 
+
+
+
     <div id="daily-plays" class="tab-content" style="display: none;">
         <h2>DAILY PLAYS</h2>
         <div id="listening-history">
+            <!-- Today Section -->
             <div id="today">
                 <h3>Today</h3>
-                <ul id="today-list"></ul>
+                <ul id="today-list">
+                    {% for track in records_by_time['Today'] %}
+                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
+                    {% endfor %}
+                </ul>
             </div>
+    
+            <!-- Yesterday Section -->
             <div id="yesterday">
                 <h3>Yesterday</h3>
-                <ul id="yesterday-list"></ul>
+                <ul id="yesterday-list">
+                    {% for track in records_by_time['Yesterday'] %}
+                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
+                    {% endfor %}
+                </ul>
             </div>
+    
+            <!-- This Week Section -->
             <div id="this-week">
                 <h3>This Week</h3>
-                <ul id="this-week-list"></ul>
+                <ul id="this-week-list">
+                    {% for track in records_by_time['This Week'] %}
+                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
+                    {% endfor %}
+                </ul>
             </div>
+    
+            <!-- Last Week Section -->
             <div id="last-week">
                 <h3>Last Week</h3>
-                <ul id="last-week-list"></ul>
+                <ul id="last-week-list">
+                    {% for track in records_by_time['Last Week'] %}
+                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
+                    {% endfor %}
+                </ul>
             </div>
+    
+            <!-- This Month Section -->
             <div id="this-month">
                 <h3>This Month</h3>
-                <ul id="this-month-list"></ul>
+                <ul id="this-month-list">
+                    {% for track in records_by_time['This Month'] %}
+                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
+                    {% endfor %}
+                </ul>
             </div>
+    
+            <!-- Older Section -->
             <div id="older">
                 <h3>Older</h3>
-                <ul id="older-list"></ul>
+                <ul id="older-list">
+                    {% for track in records_by_time['Older'] %}
+                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
+                    {% endfor %}
+                </ul>
             </div>
+    
             <button id="more-btn">More</button>
         </div>
         <input type="date" id="date-search" />
         <button id="search-btn">Search</button>
+    </div>
+    
         
+
+
         <div class="play-counts">
             {% if track_play_counts %}
                 <h2>Your TOP played song count</h2>
                 {% for track in track_play_counts %}
-                    <img src="{{ track[2] }}" alt="{{ track[2] }}">
-                    <strong>{{ track[0] }} by {{ track[1] }}</strong>
-                    <br>
-                    Played {{ track[3] }} times
+                <div class="track-item">
+                    <span class="rank">{{ loop.index }}</span> <!-- Rank number -->
+                    <div class="track-info">
+                        <img src="{{ track[2] }}" alt="{{ track[0] }}">
+                        <div class="track-details">
+                            <strong>{{ track[0] }} by {{ track[1] }}</strong>
+                        </div>
+                    </div>
+                    <div class="play-count">
+                        <span class="times">Played</span>
+                        <span class="count">{{ track[3] }}</span>
+                        <span class="times">times</span>
+                    </div>
+                </div>
                 {% endfor %}
             {% else %}
                 <p>No data available. Try logging in with Spotify.</p>
             {% endif %}
         </div>
+        
+        
+        
 
-        <div>
-            <h2>Your Recently Played Songs</h2>
-            {% if track_play_counts %}
-                <ul>
-                {% for track in track_play_counts %}
-                    <li>
-                        <strong>{{ track[0] }} by {{ track[1] }}</strong>
-                        <br>
-                        Played {{ track[2] }} times
-                    </li>
-                {% endfor %}
-                </ul>
-            {% else %}
-                <p>No recent tracks found. Try playing some music on Spotify.</p>
-            {% endif %}
-        </div>
+
+
 
         <h2>Total Plays Per Day</h2>
         {% if daily_play_counts %}

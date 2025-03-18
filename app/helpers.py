@@ -107,6 +107,7 @@ async def get_daily_listening_time(user_id, db):
     """
     return await db.fetch(query, user_id)
 
+# This is the existing code for the group_by_time_period function
 def group_by_time_period(records):
     now = datetime.now()
     time_groups = {
@@ -137,6 +138,8 @@ def group_by_time_period(records):
     
     return time_groups
 
+
+# Ensure the data is passed correctly to your template (highlighted change)
 async def complete_listening_history(user_id, db, limit, offset):
     query = """
         SELECT played_at, track_name, artist_name, duration_ms
@@ -146,7 +149,8 @@ async def complete_listening_history(user_id, db, limit, offset):
         LIMIT $2 OFFSET $3;
     """
     records = await db.fetch(query, user_id, limit, offset)
-    return group_by_time_period([dict(row) for row in records])
+    return group_by_time_period([dict(row) for row in records])  # Return grouped records by time period
+
 
 
 async def get_top_genres(user_id, db):
@@ -204,7 +208,7 @@ async def update_user_music_data(user_id, token, data_type, time_range=None):
     elif data_type == "top_tracks":
         interval = timedelta(days=1 if time_range == "short_term" else 7 if time_range == "medium_term" else 28)
     elif data_type == "recent_tracks":
-        interval = timedelta(hours=1)  # 1 hour for recent tracks
+        interval = timedelta(minutes=10)  # 10 minutes for recent tracks
     else:
         interval = timedelta(days=1)  # Default: 1 day
 

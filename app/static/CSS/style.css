@@ -207,27 +207,83 @@ h2, ul, li {
 }
 
 
-.play-counts {      
+.play-counts {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    margin-bottom: 1px; /* Space between the profile and dashboard */
-    color: #fff; /* White text color */
-    background: rgb(22, 22, 22); /* Background color for the box */
+    margin-bottom: 1px;
+    color: #fff;
+    background: rgb(56, 56, 56);
     width: 80%;
     max-width: 600px;
-    max-height: 400px;
+    max-height: 1200px;
+    padding: 20px;
+    border-radius: 10px;
+    overflow-y: auto;  /* Prevent content overflow */
 }
 
-.play-counts img {
-    width: 50px; 
-    height: 50px; 
-    object-fit: cover; 
-    object-position: top; 
-    border: 1px solid rgb(0, 0, 0);
-    margin-right: 60px; /* Space between the image and text */
+.track-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    background: #333;
+    padding: 10px;
+    border-radius: 5px;
+    box-sizing: border-box;  /* Ensure padding doesn't affect width */
 }
+
+.track-info {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.track-item img {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border: 1px solid black;
+    margin-right: 10px;
+    border-radius: 5px;
+}
+
+.track-details {
+    text-align: left;
+    flex-grow: 1;
+}
+
+.play-count {
+    text-align: right;
+    min-width: 80px;
+}
+
+.play-count span {
+    display: block;
+}
+
+.play-count .times {
+    font-size: 14px;
+    color: #aaa;
+}
+
+.play-count .count {
+    font-size: 24px;
+    font-weight: bold;
+    margin-right: 10px;
+    color: #0ac55e;
+}
+
+.rank {
+    font-size: 24px;
+    font-weight: bold;
+    margin-right: 10px;
+    color: #0ac55e
+}
+
+
 
 
 
