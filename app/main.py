@@ -183,7 +183,7 @@ import traceback, os
 executor = ThreadPoolExecutor(max_workers=5)  # Use thread pool for DB calls
 
 @app.get("/dashboard")
-async def dashboard(request: Request, limit: int = 100, offset: int = 0):
+async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
     db = None
     try:
         token = request.session.get("spotify_token")
@@ -219,7 +219,6 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         total_listened_minutes, total_listened_hours = await get_total_listening_time(user_id, db)
         daily_listening_time = await get_daily_listening_time(user_id, db)
         top_genres = await get_top_genres(user_id, db)
-        listening_history = await complete_listening_history(user_id, db, limit, offset)
         records_by_time = await complete_listening_history(user_id, db, limit, offset)
 
         # Update music data asynchronously
@@ -265,7 +264,6 @@ async def dashboard(request: Request, limit: int = 100, offset: int = 0):
         "track_name": playing_now_data.get("track_name"),
         "artist_name": playing_now_data.get("artists"),
         "album_img": playing_now_data.get("album_image_url"),
-        "listening_history": listening_history,
         "records_by_time": records_by_time
     }
 

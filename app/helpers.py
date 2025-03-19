@@ -108,35 +108,51 @@ async def get_daily_listening_time(user_id, db):
     return await db.fetch(query, user_id)
 
 # This is the existing code for the group_by_time_period function
+from datetime import datetime, timedelta
+
 def group_by_time_period(records):
     now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+    start_of_week = today_start - timedelta(days=today_start.weekday())  # Monday of this week
+    start_of_last_week = start_of_week - timedelta(weeks=1)
+    end_of_last_week = start_of_week - timedelta(days=1)
+    start_of_this_month = today_start.replace(day=1)
+    end_of_this_month = (start_of_this_month.replace(month=now.month % 12 + 1, day=1) - timedelta(days=1))
+
     time_groups = {
         "Today": [],
         "Yesterday": [],
         "This Week": [],
-        "Last Week": [],
         "This Month": [],
         "Older": [],
     }
 
     for track in records:
         played_at = track['played_at']
-        delta = now - played_at
-
-        if delta.days == 0:
+        # Normalize played_at to a datetime object if needed
+        if isinstance(played_at, str):
+            played_at = datetime.fromisoformat(played_at)  # Convert if it's a string
+        
+        if played_at.date() == today_start.date():
             time_groups["Today"].append(track)
-        elif delta.days == 1:
+        elif played_at.date() == yesterday_start.date():
             time_groups["Yesterday"].append(track)
-        elif delta.days <= 7:
+        elif start_of_week <= played_at < today_start:
             time_groups["This Week"].append(track)
-        elif delta.days <= 14:
-            time_groups["Last Week"].append(track)
-        elif played_at.month == now.month:
+        elif start_of_last_week <= played_at <= end_of_last_week:
+            # Only add to "Last Week" if it doesn't fall within the current month's range
+            if not (start_of_this_month <= played_at <= end_of_this_month):
+                time_groups["This Week"].append(track)  # This week is handled in "This Month"
+            else:
+                time_groups["Older"].append(track)
+        elif start_of_this_month <= played_at <= end_of_this_month:
             time_groups["This Month"].append(track)
         else:
             time_groups["Older"].append(track)
     
     return time_groups
+
 
 
 # Ensure the data is passed correctly to your template (highlighted change)

@@ -175,6 +175,7 @@ h2, ul, li {
     background-color: #660761; /* Background color for the box */
     padding: 10px;
     border-radius: 10px;
+    box-sizing: border-box; /* Ensures padding doesn't affect the overall width */
 }
 
 .now-playing img {
@@ -183,28 +184,33 @@ h2, ul, li {
     object-fit: cover; 
     object-position: top; 
     border: 1px solid rgb(0, 0, 0);
-    margin-right: 60px; /* Space between the image and text */
+    margin-right: 15px; /* Reduced space between the image and text */
 }
 
 .now-playing .text-container {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    width: calc(100% - 65px); /* Ensures that the text container adjusts to the remaining space */
 }
 
 .now-playing .title { /* Title of the box */
     font-weight: bold;
     color: #ffffff; /* White text color */
     font-size: 16px;
-    margin-right: 10px; /* Space between the image and text */
-    margin-left: 10px; /* Space between the image and text */
+    margin-bottom: 5px; /* Adds space between the title and the artist/song name */
 }
 
 .now-playing .number { /* artist and song name in the box */
     color: #fff; /* White text color */
     font-size: 14px;
     margin-right: 10px; /* Space between the image and text */
+    white-space: nowrap; /* Prevents text from wrapping */
+    overflow: hidden; /* Hides overflow text */
+    text-overflow: ellipsis; /* Shows ellipsis for long text */
+    width: 100%; /* Ensures the text fills the available space */
 }
+
 
 
 .play-counts {
@@ -288,7 +294,6 @@ h2, ul, li {
 
 
 
-
 * {
     margin: 0;
     padding: 0;
@@ -329,18 +334,60 @@ h2, ul, li {
     padding: 20px;
 }
 
-/* Tab content hidden by default */
 .tab-content {
-    display: none;
+    display: none; /* Hide all tab content by default */
 }
 
-/* Show selected tab content when targeted */
-.tab-content:target {
+
+/* Show only the first tab by default */
+#dashboard {
     display: block;
 }
 
-/* Ensure the active tab's content is visible */
-#tab1:target, #tab2:target, #tab3:target, #tab4:target, #tab5:target {
-    display: block;
+
+
+
+
+
+#listening-history {
+    margin: 20px;
 }
 
+h3 {
+    margin-bottom: 10px;
+}
+
+.track-list {
+    margin-bottom: 20px;
+}
+
+.track {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #ccc;
+}
+
+.track-time {
+    font-size: 0.9em;
+    color: #ffffff;
+    margin-right: 10px;
+}
+
+.track-info {
+    font-weight: bold;
+    color: #ffffff;
+}
+
+button#more-btn {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button#more-btn:hover {
+    background-color: #0056b3;
+}

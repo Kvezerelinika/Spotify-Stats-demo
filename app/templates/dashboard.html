@@ -26,6 +26,35 @@ document.getElementById('more-btn').addEventListener('click', function() {
 });
 </script>
 
+<script>
+    document.querySelectorAll('.sidebar a').forEach(tab => {
+        tab.addEventListener('click', function(event) {
+            event.preventDefault(); // Prevent the default link behavior
+
+            // Remove 'active' class from all tabs
+            document.querySelectorAll('.sidebar a').forEach(link => link.classList.remove('active'));
+
+            // Add 'active' class to the clicked tab
+            this.classList.add('active');
+
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+
+            // Show the corresponding tab content
+            const targetTab = document.querySelector(this.getAttribute('href'));
+            targetTab.style.display = 'block';
+        });
+    });
+
+    // Automatically show the first tab (Dashboard) on page load
+    const firstTab = document.querySelector('.sidebar a');
+    const firstTabContent = document.querySelector(firstTab.getAttribute('href'));
+    firstTab.classList.add('active');
+    firstTabContent.style.display = 'block';
+</script>
+
+
+
 
 <script>
     let offset = 0;
@@ -146,14 +175,24 @@ document.getElementById('more-btn').addEventListener('click', function() {
     <p>No track is currently playing.</p>
 {% endif %}
 
+
 <!-- Sidebar -->
 <div class="sidebar">
-    <a href="#tab1" onclick="showTab('dashboard')">DASHBOARD</a> <!-- Add onclick event -->
-    <a href="#tab2" onclick="showTab('daily-plays')">DAILY PLAYS</a>
-    <a href="#tab3" onclick="showTab('top-genres')">TOP GENRES</a>
-    <a href="#tab4" onclick="showTab('top-tracks')">TOP TRACKS</a>
-    <a href="#tab5" onclick="showTab('total-time')">TOTAL TIME</a>
+    <a href="#dashboard" class="active">Dashboard</a>
+    <a href="#daily-plays">Daily Plays</a>
+    <a href="#top-genres">Top Genres</a>
+    <a href="#top-tracks">Top Tracks</a>
+    <a href="#total-time">Total Time</a>
 </div>
+
+
+<!-- Tab Content -->
+<div id="dashboard-content" class="tab-content" style="display: block;">Your TOP played song count</div>
+<div id="daily-plays-content" class="tab-content">Total Plays Per Day</div>
+<div id="top-genres-content" class="tab-content">Top Genres</div>
+<div id="top-tracks-content" class="tab-content">Top Tracks</div>
+<div id="total-time-content" class="tab-content">Total Listening Time</div>
+
 
 <div class="content">
     <div id="dashboard" class="tab-content">
@@ -209,105 +248,136 @@ document.getElementById('more-btn').addEventListener('click', function() {
 
 
     <div id="daily-plays" class="tab-content" style="display: none;">
-        <h2>DAILY PLAYS</h2>
-        <div id="listening-history">
-            <!-- Today Section -->
-            <div id="today">
-                <h3>Today</h3>
-                <ul id="today-list">
-                    {% for track in records_by_time['Today'] %}
-                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
-                    {% endfor %}
-                </ul>
+    <h2>DAILY PLAYS</h2>
+    <div id="listening-history">
+        <!-- Today Section -->
+        <div id="today">
+            <h3>Today - 
+                <span id="today-streams">{{ today_streams }}</span> streams, 
+                <span id="today-time">{{ today_time }}</span> total time
+            </h3>
+            <div class="track-list">
+                {% for track in records_by_time['Today'] %}
+                    <div class="track">
+                        <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                    </div>
+                {% endfor %}
             </div>
-    
-            <!-- Yesterday Section -->
-            <div id="yesterday">
-                <h3>Yesterday</h3>
-                <ul id="yesterday-list">
-                    {% for track in records_by_time['Yesterday'] %}
-                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-    
-            <!-- This Week Section -->
-            <div id="this-week">
-                <h3>This Week</h3>
-                <ul id="this-week-list">
-                    {% for track in records_by_time['This Week'] %}
-                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-    
-            <!-- Last Week Section -->
-            <div id="last-week">
-                <h3>Last Week</h3>
-                <ul id="last-week-list">
-                    {% for track in records_by_time['Last Week'] %}
-                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-    
-            <!-- This Month Section -->
-            <div id="this-month">
-                <h3>This Month</h3>
-                <ul id="this-month-list">
-                    {% for track in records_by_time['This Month'] %}
-                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-    
-            <!-- Older Section -->
-            <div id="older">
-                <h3>Older</h3>
-                <ul id="older-list">
-                    {% for track in records_by_time['Older'] %}
-                        <li>{{ track['track_name'] }} by {{ track['artist_name'] }} - Played at {{ track['played_at'] }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-    
-            <button id="more-btn">More</button>
         </div>
-        <input type="date" id="date-search" />
-        <button id="search-btn">Search</button>
+
+        <!-- Yesterday Section -->
+        <div id="yesterday">
+            <h3>Yesterday - 
+                <span id="yesterday-streams">{{ yesterday_streams }}</span> streams, 
+                <span id="yesterday-time">{{ yesterday_time }}</span> total time
+            </h3>
+            <div class="track-list">
+                {% for track in records_by_time['Yesterday'] %}
+                    <div class="track">
+                        <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- This Week Section -->
+        <div id="this-week">
+            <h3>This Week - 
+                <span id="this-week-streams">{{ this_week_streams }}</span> streams, 
+                <span id="this-week-time">{{ this_week_time }}</span> total time
+            </h3>
+            <div class="track-list">
+                {% for track in records_by_time['This Week'] %}
+                    <div class="track">
+                        <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Last Week Section -->
+        <div id="last-week">
+            <h3>Last Week - 
+                <span id="last-week-streams">{{ last_week_streams }}</span> streams, 
+                <span id="last-week-time">{{ last_week_time }}</span> total time
+            </h3>
+            <div class="track-list">
+                {% for track in records_by_time['Last Week'] %}
+                    <div class="track">
+                        <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- This Month Section -->
+        <div id="this-month">
+            <h3>This Month - 
+                <span id="this-month-streams">{{ this_month_streams }}</span> streams, 
+                <span id="this-month-time">{{ this_month_time }}</span> total time
+            </h3>
+            <div class="track-list">
+                {% for track in records_by_time['This Month'] %}
+                    <div class="track">
+                        <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Older Section -->
+        <div id="older">
+            <h3>Older - 
+                <span id="older-streams">{{ older_streams }}</span> streams, 
+                <span id="older-time">{{ older_time }}</span> total time
+            </h3>
+            <div class="track-list">
+                {% for track in records_by_time['Older'] %}
+                    <div class="track">
+                        <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <button id="more-btn">More</button>
     </div>
+
+    <input type="date" id="date-search" />
+    <button id="search-btn">Search</button>
+</div>
+
+
     
         
 
 
         <div class="play-counts">
-            {% if track_play_counts %}
-                <h2>Your TOP played song count</h2>
-                {% for track in track_play_counts %}
-                <div class="track-item">
-                    <span class="rank">{{ loop.index }}</span> <!-- Rank number -->
-                    <div class="track-info">
-                        <img src="{{ track[2] }}" alt="{{ track[0] }}">
-                        <div class="track-details">
-                            <strong>{{ track[0] }} by {{ track[1] }}</strong>
-                        </div>
-                    </div>
-                    <div class="play-count">
-                        <span class="times">Played</span>
-                        <span class="count">{{ track[3] }}</span>
-                        <span class="times">times</span>
+            <h3>The most listened songs</h3>
+            {% for track in track_play_counts %}
+            <div class="track-item">
+                <span class="rank">{{ loop.index }}</span> <!-- Rank number -->
+                <div class="track-info">
+                    <img src="{{ track[2] }}" alt="{{ track[0] }}">
+                    <div class="track-details">
+                        <strong>{{ track[0] }} by {{ track[1] }}</strong>
                     </div>
                 </div>
-                {% endfor %}
-            {% else %}
-                <p>No data available. Try logging in with Spotify.</p>
-            {% endif %}
+                <div class="play-count">
+                    <span class="times">Played</span>
+                    <span class="count">{{ track[3] }}</span>
+                    <span class="times">times</span>
+                </div>
+            </div>
+        {% endfor %}
         </div>
         
-        
-        
-
-
 
 
         <h2>Total Plays Per Day</h2>
@@ -330,6 +400,8 @@ document.getElementById('more-btn').addEventListener('click', function() {
             <p>No data available for total plays.</p>
         {% endif %}
     </div>
+</div>
+
 
     <div id="top-genres" class="tab-content" style="display: none;">
         <h2>TOP GENRES</h2>
@@ -344,6 +416,10 @@ document.getElementById('more-btn').addEventListener('click', function() {
         {% endif %}
     </div>
 
+
+
+
+
     <div id="top-tracks" class="tab-content" style="display: none;">
         <h2>TOP TRACKS</h2>
         {% if top_tracks_list %}
@@ -356,6 +432,10 @@ document.getElementById('more-btn').addEventListener('click', function() {
             <p>No data available for top tracks.</p>
         {% endif %}
     </div>
+
+
+
+
 
     <div id="total-time" class="tab-content" style="display: none;">
         <h2>TOTAL TIME</h2>
@@ -386,11 +466,24 @@ document.getElementById('more-btn').addEventListener('click', function() {
 <!-- Minimal JavaScript to handle the active tab -->
 <script>
     document.querySelectorAll('.sidebar a').forEach(tab => {
-        tab.addEventListener('click', function() {
+        tab.addEventListener('click', function(event) {
+            event.preventDefault(); // Prevent default link behavior
+            
+            // Remove 'active' from all sidebar links
             document.querySelectorAll('.sidebar a').forEach(link => link.classList.remove('active'));
             this.classList.add('active');
+
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+
+            // Show the selected tab content
+            const targetTab = document.querySelector(this.getAttribute('href'));
+            if (targetTab) {
+                targetTab.style.display = 'block';
+            }
         });
     });
 </script>
+
 
 {% endblock %}
