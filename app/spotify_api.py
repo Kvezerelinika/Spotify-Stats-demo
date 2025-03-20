@@ -15,7 +15,7 @@ async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name
                 await asyncio.sleep(retry_after)
             elif response.status_code == 200:
                 json_response = response.json()  # No need to await here
-                print(f"{method_name} - JSON Response:", json_response)  # Debugging line
+                # print(f"{method_name} - JSON Response:", json_response)  # Debugging line
                 return json_response  # Return the JSON response directly
             elif response.status_code == 204:  # Handle No Content (currently no track playing)
                 print(f"{method_name} - No track currently playing.")

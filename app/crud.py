@@ -43,9 +43,6 @@ async def top_artists_to_database(top_artists, user_id, time_range):
 
 
 async def recents_to_database(recent_tracks, user_id):   
-    # Debugging the recent_tracks
-    print("Recent tracks data received:", recent_tracks)  # Debugging line
-
     db = await get_db_connection()
 
     try:
@@ -248,24 +245,18 @@ async def all_artist_id_and_image_url_into_database(track_data, user_id):
             album = track.get("album", {})
             artists = album.get("artists", [])
             images = album.get("images", [])
-            print(f"Processing track: {track_id}")
-            print(f"album image: {images}")
-            print(f"artists: {artists}")
 
             if not track_id or not artists:
                 continue  # Skip if no valid data
 
             artist_id = artists[0].get("id") if artists else None
-            print(f"artist_id: {artist_id}")
             image_url = images[0]["url"] if images else None
-            print(f"image_url: {image_url}")
 
             if artist_id:
                 await cursor.execute(
                     "UPDATE listening_history SET artist_id = %s, album_image_url = %s WHERE user_id = %s AND track_id = %s",
                     (artist_id, image_url, user_id, track_id)
                 )
-                print(cursor.query)
 
         db.commit()
         print("Database updated successfully all artists_id album_url in database.")

@@ -221,10 +221,12 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         top_genres = await get_top_genres(user_id, db)
         records_by_time = await complete_listening_history(user_id, db, limit, offset)
 
+        time_range = request.query_params.get('time_range', 'medium_term')
+
         # Update music data asynchronously
-        await update_user_music_data(user_id, token, "top_artists", time_range="medium_term")
-        await update_user_music_data(user_id, token, "top_tracks", time_range="medium_term")
-        await update_user_music_data(user_id, token, "recent_tracks", time_range="short_term")
+        await update_user_music_data(user_id, token, "top_artists", time_range)
+        await update_user_music_data(user_id, token, "top_tracks", time_range)
+        await update_user_music_data(user_id, token, "recent_tracks")
 
         # Get currently playing track (Spotify API is async, so no need for executor)
         playing_now_data = await get_current_playing(token)
@@ -264,7 +266,8 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         "track_name": playing_now_data.get("track_name"),
         "artist_name": playing_now_data.get("artists"),
         "album_img": playing_now_data.get("album_image_url"),
-        "records_by_time": records_by_time
+        "records_by_time": records_by_time,
+        "current_time_range": time_range
     }
 
     return templates.TemplateResponse("dashboard.html", context)
