@@ -4,41 +4,54 @@ from datetime import datetime
 import psycopg2  # Assuming you are using PostgreSQL
 
 async def top_artists_to_database(top_artists, user_id, time_range):
-    db = await get_db_connection()  # Using asyncpg for async connection
+    db = await get_db_connection()
     if db is None:
         print("Failed to connect to the database.")
         return
-    
+
     try:
-        async with db.transaction():  # Use async transaction for better concurrency handling
-            top_artist = []
-            for index, artist in enumerate(top_artists["items"]):
-                artist_id = artist["id"]
-                artist_name = artist["name"]
-                spotify_url = artist["external_urls"]["spotify"]
-                followers = artist.get("followers", {}).get("total", 0)
-                genres = ", ".join(artist.get("genres")) if artist.get("genres") else None
-                image_url = artist["images"][0]["url"] if artist["images"] else None
-                rank = index + 1
-                uri = artist["uri"]
+        async with db.transaction():
+            # Step 1: Delete old records for this user and time_range
+            await db.execute(
+                "DELETE FROM users_top_artists WHERE user_id = $1 AND time_range = $2;",
+                user_id, time_range
+            )
 
-                top_artist.append((user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri))
+            # Step 2: Prepare the new data for insertion
+            top_artist = [
+                (
+                    user_id,
+                    artist["id"],
+                    artist["name"],
+                    artist["external_urls"]["spotify"],
+                    artist.get("followers", {}).get("total", 0),
+                    ", ".join(artist.get("genres", [])) if artist.get("genres") else None,
+                    artist["images"][0]["url"] if artist.get("images") else None,
+                    index + 1,  # Rank from API
+                    artist["uri"],
+                    time_range,
+                )
+                for index, artist in enumerate(top_artists["items"])
+            ]
 
+            # Step 3: Insert new data
             if top_artist:
                 await db.executemany(
-                    "INSERT INTO users_top_artists (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri) "
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) "
-                    "ON CONFLICT (user_id, artist_id) DO UPDATE "
-                    "SET followers = EXCLUDED.followers, genres = EXCLUDED.genres, image_url = EXCLUDED.image_url, rank = EXCLUDED.rank", 
+                    """
+                    INSERT INTO users_top_artists 
+                    (user_id, artist_id, artist_name, spotify_url, followers, genres, image_url, rank, uri, time_range) 
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+                    """,
                     top_artist
                 )
             else:
                 print("No new top artists to add.")
-        
+
     except Exception as e:
         print(f"Database insertion error in top_artists_to_database: {e}")
     finally:
-        await db.close()  # Close the connection when done
+        await db.close()
+
 
 
 
@@ -119,9 +132,9 @@ async def top_tracks_to_database(top_tracks, user_id, time_range):
             # ✅ Convert release_date to a proper datetime.date object
             release_date_str = track["album"]["release_date"]
             if len(release_date_str) == 10:  # Format: YYYY-MM-DD
-                release_date = datetime.datetime.strptime(release_date_str, "%Y-%m-%d").date()
+                release_date = datetime.strptime(release_date_str, "%Y-%m-%d").date()
             elif len(release_date_str) == 7:  # Format: YYYY-MM (some Spotify data)
-                release_date = datetime.datetime.strptime(release_date_str, "%Y-%m").date()
+                release_date = datetime.strptime(release_date_str, "%Y-%m").date()
             elif len(release_date_str) == 4:  # Format: YYYY
                 release_date = datetime.date(int(release_date_str), 1, 1)  # Default to January 1st
             else:

@@ -14,9 +14,9 @@ async def get_user_info(user_id, db):
 
 
 
-async def get_top_artists_db(user_id, db):
-    query = "SELECT artist_name, image_url, spotify_url FROM users_top_artists WHERE user_id = $1 ORDER BY id ASC;"
-    return await db.fetch(query, user_id)
+async def get_top_artists_db(user_id, db, time_range):
+    query = "SELECT artist_name, image_url, spotify_url FROM users_top_artists WHERE user_id = $1 AND time_range = $2 ORDER BY rank ASC;"
+    return await db.fetch(query, user_id, time_range)
 
 
 
@@ -214,7 +214,7 @@ async def get_last_update_from_db(user_id, data_type, time_range):
 
 from datetime import datetime, timedelta
 
-async def update_user_music_data(user_id, token, data_type, time_range=None):
+async def update_user_music_data(user_id, token, data_type, time_range):
     last_update = await get_last_update_from_db(user_id, data_type, time_range)
     current_time = datetime.now()
 

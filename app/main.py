@@ -205,12 +205,19 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         user_id = user_data[0][0]  # Assuming the first element is user_id
         request.session["user_id"] = user_id
 
+        time_range = request.query_params.get('time_range', 'medium_term')
+
         # Connect to the database using asyncpg
         db = await get_db_connection()
 
+        # Update music data asynchronously
+        await update_user_music_data(user_id, token, "top_artists", time_range)
+        await update_user_music_data(user_id, token, "top_tracks", time_range)
+        await update_user_music_data(user_id, token, "recent_tracks", time_range)
+
         # Fetch data asynchronously
         user_info = await get_user_info(user_id, db)
-        top_artist_list = await get_top_artists_db(user_id, db)
+        top_artist_list = await get_top_artists_db(user_id, db, time_range)
         top_tracks_list = await get_top_tracks_db(user_id, db)
         track_play_counts = await get_track_play_counts(user_id, db)
         daily_play_count = await get_daily_play_counts(user_id, db)
@@ -220,13 +227,6 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         daily_listening_time = await get_daily_listening_time(user_id, db)
         top_genres = await get_top_genres(user_id, db)
         records_by_time = await complete_listening_history(user_id, db, limit, offset)
-
-        time_range = request.query_params.get('time_range', 'medium_term')
-
-        # Update music data asynchronously
-        await update_user_music_data(user_id, token, "top_artists", time_range)
-        await update_user_music_data(user_id, token, "top_tracks", time_range)
-        await update_user_music_data(user_id, token, "recent_tracks")
 
         # Get currently playing track (Spotify API is async, so no need for executor)
         playing_now_data = await get_current_playing(token)
