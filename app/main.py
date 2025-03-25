@@ -180,35 +180,43 @@ import asyncio, asyncpg
 from concurrent.futures import ThreadPoolExecutor
 import traceback, os
 
-executor = ThreadPoolExecutor(max_workers=5)  # Use thread pool for DB calls
 
-@app.get("/dashboard")
+from fastapi import Request, APIRouter
+from fastapi.responses import RedirectResponse, JSONResponse
+import traceback
+
+router = APIRouter()
+
+@router.get("/dashboard")
 async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
-    db = None
+    db = None  # Initialize db early
     try:
+        # Get session data
         token = request.session.get("spotify_token")
         user_id = request.session.get("user_id")
 
+        # If no token, redirect to login
         if not token or not user_id:
             return RedirectResponse(url="/login")
 
-        # Fetch user profile
-        try:
-            user_profile = await get_spotify_user_profile(token)
-            if not user_profile:
-                return {"error": "Failed to fetch user profile from Spotify."}
-        except Exception as e:
-            return {"error": f"An error occurred while fetching user profile: {str(e)}"}
+        # Fetch user profile from Spotify
+        user_profile = await get_spotify_user_profile(token)
+        if not user_profile:
+            return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
 
         # Save user data to database
         user_data = await user_info_to_database(user_profile)
-        user_id = user_data[0][0]  # Assuming the first element is user_id
-        request.session["user_id"] = user_id
 
-        time_range = request.query_params.get('time_range', 'medium_term')
+        if user_data:
+            new_user_id = user_data[0][0]  # Ensure correct user_id extraction
+            if new_user_id != user_id:
+                request.session["user_id"] = new_user_id  # Update session only if changed
 
-        # Connect to the database using asyncpg
+        # Establish database connection
         db = await get_db_connection()
+
+        # Fetch time range
+        time_range = request.query_params.get('time_range', 'medium_term')
 
         # Update music data asynchronously
         await update_user_music_data(user_id, token, "top_artists", time_range)
@@ -228,20 +236,19 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         top_genres = await get_top_genres(user_id, db)
         records_by_time = await complete_listening_history(user_id, db, limit, offset)
 
-        # Get currently playing track (Spotify API is async, so no need for executor)
-        playing_now_data = await get_current_playing(token)
-        if playing_now_data is None:
-            playing_now_data = {"track_name": "N/A", "artist_name": "N/A", "album_image_url": "N/A"}
+        # Get currently playing track
+        playing_now_data = await get_current_playing(token) or {
+            "track_name": "N/A",
+            "artist_name": "N/A",
+            "album_image_url": "N/A"
+        }
 
     except Exception as e:
-        # Capture the traceback as well
-        error_message = str(e)
-        error_traceback = traceback.format_exc()  # Get the full traceback
-        
-        print(f"Error fetching dashboard data: {error_message}")
-        print(f"Traceback:\n{error_traceback}")
-        
-        return {"error": "There was an issue fetching data. Please try again later."}
+        # Capture the traceback for debugging
+        error_traceback = traceback.format_exc()
+        print(f"Error fetching dashboard data: {str(e)}\nTraceback:\n{error_traceback}")
+
+        return JSONResponse(content={"error": "An unexpected error occurred."}, status_code=500)
 
     finally:
         if db:
@@ -250,7 +257,7 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
     # Prepare context for rendering
     context = {
         "request": request,
-        "user_id": user_id,
+        "user_id": request.session["user_id"],  # Use updated session user_id
         "track_play_counts": track_play_counts,
         "daily_play_counts": daily_play_count,
         "total_play_count": total_play_count,
@@ -264,13 +271,14 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         "user_image": user_info[7] if user_info else None,
         "user_name": user_info[1] if user_info else "Unknown User",
         "track_name": playing_now_data.get("track_name"),
-        "artist_name": playing_now_data.get("artists"),
+        "artist_name": playing_now_data.get("artist_name", "Unknown Artist"),  # Fix key
         "album_img": playing_now_data.get("album_image_url"),
         "records_by_time": records_by_time,
         "current_time_range": time_range
     }
 
     return templates.TemplateResponse("dashboard.html", context)
+
 
 
 

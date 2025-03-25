@@ -192,16 +192,34 @@ async def get_top_genres(user_id, db):
 async def get_last_update_from_db(user_id, data_type, time_range):
     db = await get_db_connection()  # Ensure this returns an asyncpg connection
     result = None  # Initialize result to avoid UnboundLocalError
-
     try:
-        result = await db.fetchrow(
-            """
-            SELECT last_update 
-            FROM user_data 
-            WHERE user_id = $1 AND data_type = $2 AND time_range = $3;
-            """,
-            user_id, data_type, time_range
-        )
+        if data_type == "top_tracks":
+            result = await db.fetchrow(
+                """
+                SELECT last_updated 
+                FROM users_top_tracks
+                WHERE user_id = $1 AND time_range = $2;
+                """,
+                user_id, data_type
+            )
+        elif data_type == "top_artists":   
+            result = await db.fetchrow(
+                """
+                SELECT last_updated
+                FROM uusers_top_artists 
+                WHERE user_id = $1 AND time_range = $2;
+                """,
+                user_id, time_range
+            )
+        elif data_type == "recent_tracks":
+            result = await db.fetchrow(
+                """
+                SELECT played_at
+                FROM listening_history 
+                WHERE user_id = $1;
+                """,
+                user_id
+            )
     except Exception as e:
         print(f"Error fetching last update for {user_id}, {data_type}, {time_range}: {e}")
     finally:
@@ -218,48 +236,30 @@ async def update_user_music_data(user_id, token, data_type, time_range):
     last_update = await get_last_update_from_db(user_id, data_type, time_range)
     current_time = datetime.now()
 
-    # Define intervals for different data types and time ranges
-    if data_type == "top_artists":
-        interval = timedelta(weeks=12 if time_range == "long_term" else 6 if time_range == "medium_term" else 4)
-    elif data_type == "top_tracks":
-        interval = timedelta(days=1 if time_range == "short_term" else 7 if time_range == "medium_term" else 28)
-    elif data_type == "recent_tracks":
-        interval = timedelta(minutes=10)  # 10 minutes for recent tracks
-    else:
-        interval = timedelta(days=1)  # Default: 1 day
+    # Define update intervals based on data_type
+    intervals = {
+        "top_artists": timedelta(weeks=12 if time_range == "long_term" else 6 if time_range == "medium_term" else 4),
+        "top_tracks": timedelta(days=1 if time_range == "short_term" else 7 if time_range == "medium_term" else 28),
+        "recent_tracks": timedelta(minutes=10),
+    }
+    
+    interval = intervals.get(data_type, timedelta(days=1))  # Default to 1 day
 
-    # Check if data is outdated
     if not last_update or current_time - last_update > interval:
-        print(f"Updating {data_type} data for user {user_id}, time range {time_range}...")
+        print(f"Updating {data_type} data after {last_update} for user {user_id}, time range {time_range}...")
 
         if data_type == "top_artists":
             top_artists = await get_top_artists(token, time_range)
-            await top_artists_to_database(top_artists, user_id, time_range)
+            await top_artists_to_database(top_artists, user_id, time_range, current_time)
         elif data_type == "top_tracks":
             top_tracks = await get_top_tracks(token)
-            await top_tracks_to_database(top_tracks, user_id, time_range)
+            await top_tracks_to_database(top_tracks, user_id, time_range, current_time)
         elif data_type == "recent_tracks":
             recent_tracks = await get_recently_played_tracks(token)
-            await recents_to_database(recent_tracks, user_id)
-
-        # Update last update timestamp
-        db = await get_db_connection()
-        try:
-            await db.execute(
-                """
-                INSERT INTO user_data (user_id, data_type, time_range, last_update)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (user_id, data_type, time_range) 
-                DO UPDATE SET last_update = EXCLUDED.last_update;
-                """,
-                user_id, data_type, time_range, current_time
-            )
-        except Exception as e:
-            print(f"Error updating last update timestamp: {e}")
-        finally:
-            await db.close()
+            await recents_to_database(recent_tracks, user_id, current_time)
     else:
         print(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
+
 
 
 
