@@ -191,43 +191,47 @@ async def get_top_genres(user_id, db):
 
 async def get_last_update_from_db(user_id, data_type, time_range):
     db = await get_db_connection()  # Ensure this returns an asyncpg connection
-    result = None  # Initialize result to avoid UnboundLocalError
+    result = None  # Initialize result
+
     try:
         if data_type == "top_tracks":
             result = await db.fetchrow(
                 """
-                SELECT last_updated 
+                SELECT last_updated  -- Column name is last_updated, not last_update
                 FROM users_top_tracks
                 WHERE user_id = $1 AND time_range = $2;
                 """,
-                user_id, data_type
+                user_id, time_range  # Fix: Use time_range instead of data_type
             )
+            return result["last_updated"] if result else None  # Fix KeyError
+
         elif data_type == "top_artists":   
             result = await db.fetchrow(
                 """
-                SELECT last_updated
-                FROM uusers_top_artists 
+                SELECT last_updated 
+                FROM users_top_artists 
                 WHERE user_id = $1 AND time_range = $2;
                 """,
                 user_id, time_range
             )
+            return result["last_updated"] if result else None  # Fix KeyError
+
         elif data_type == "recent_tracks":
             result = await db.fetchrow(
                 """
-                SELECT played_at
+                SELECT MAX(played_at) as last_updated  -- Use MAX() to get the most recent track
                 FROM listening_history 
                 WHERE user_id = $1;
                 """,
                 user_id
             )
+            return result["last_updated"] if result else None  # Fix KeyError
+
     except Exception as e:
         print(f"Error fetching last update for {user_id}, {data_type}, {time_range}: {e}")
+        return None  # Return None on error
     finally:
         await db.close()  # Close connection properly
-
-    return result["last_update"] if result else None
-
-
 
 
 from datetime import datetime, timedelta
@@ -250,13 +254,13 @@ async def update_user_music_data(user_id, token, data_type, time_range):
 
         if data_type == "top_artists":
             top_artists = await get_top_artists(token, time_range)
-            await top_artists_to_database(top_artists, user_id, time_range, current_time)
+            await top_artists_to_database(top_artists, user_id, time_range, current_time, token)
         elif data_type == "top_tracks":
-            top_tracks = await get_top_tracks(token)
-            await top_tracks_to_database(top_tracks, user_id, time_range, current_time)
+            top_tracks = await get_top_tracks(token, time_range)
+            await top_tracks_to_database(top_tracks, user_id, time_range, token)
         elif data_type == "recent_tracks":
             recent_tracks = await get_recently_played_tracks(token)
-            await recents_to_database(recent_tracks, user_id, current_time)
+            await recents_to_database(recent_tracks, user_id)
     else:
         print(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
 

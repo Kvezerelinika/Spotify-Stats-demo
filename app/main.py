@@ -108,39 +108,31 @@ async def callback(request: Request):
     
     # Extract 'code' and 'state' from query parameters
     code = request.query_params.get("code")
-    print("code: ", code)
     state = request.query_params.get("state")
-    print("state: ", state)
 
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing code or state in the callback")
 
     # Step 1: Verify the 'state' parameter to prevent CSRF attacks
     stored_state = request.session.get("spotify_auth_state")
-    print("stored_state: ", stored_state)
     if not stored_state or stored_state != state:
         raise HTTPException(status_code=400, detail="State mismatch in callback. Possible CSRF attack.")
 
     try:
         # Step 2: Exchange the authorization code for an access token
         token_response = await get_spotify_token(code, state, request)
-        print("token_response: ", token_response)
 
         if "access_token" in token_response:
             access_token = token_response["access_token"]
-            print("access_token: ", access_token)
 
             # Store the access token in session
             request.session["spotify_token"] = access_token
-            print("request.session: ", request.session)
 
             # Step 3: Fetch user data from Spotify
             user_info = await get_spotify_user_profile(access_token)
-            print("user_info: ", user_info)
 
             # Step 4: Extract user_id from user info and store it in session
             user_id = user_info.get("id")
-            print("user_id: ", user_id)
             if user_id:
                 request.session["user_id"] = user_id  # Save user_id in session
 
@@ -200,15 +192,12 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
     db = None
     try:
         token = request.session.get("spotify_token")
-        print("token: ", token)
         user_id = request.session.get("user_id")
-        print("user_id: ", user_id)
 
         if not token or not user_id:
             return RedirectResponse(url="/login")
 
         user_profile = await get_spotify_user_profile(token)
-        print("user profile: ", user_profile)
         if not user_profile:
             return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
 
