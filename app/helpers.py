@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from collections import Counter
@@ -9,28 +9,55 @@ from app.database import get_db_connection
 
 async def get_user_info(user_id, db):
     # Use asyncpg methods instead of cursor
-    query = "SELECT * FROM users WHERE id = $1"
+    query = "SELECT * FROM users WHERE user_id = $1"
     return await db.fetchrow(query, user_id)
 
 
 
 async def get_top_artists_db(user_id, db, time_range):
-    query = "SELECT artist_name, image_url, spotify_url FROM users_top_artists WHERE user_id = $1 AND time_range = $2 ORDER BY rank ASC;"
+    query = """
+        SELECT 
+            a.name, 
+            a.image_url, 
+            a.spotify_url,
+            uta.rank
+        FROM users_top_artists uta
+        JOIN artists a ON uta.artist_id = a.artist_id
+        WHERE uta.user_id = $1 
+        AND uta.time_range = $2
+        ORDER BY uta.rank ASC;
+    """
     return await db.fetch(query, user_id, time_range)
 
 
 
-async def get_top_tracks_db(user_id, db):
-    query = "SELECT track_name, artist_name, popularity, album_image_url, spotify_url FROM top_tracks WHERE user_id = $1 ORDER BY rank ASC;"
-    return await db.fetch(query, user_id)
+async def get_top_tracks_db(user_id, db, time_range):
+    query = """
+    SELECT 
+        uta.artist_id,  -- From users_top_artists
+        uta.rank,       -- From users_top_artists
+        a.name,         -- From artists
+        a.image_url,    -- From artists
+        a.spotify_url   -- From artists
+    FROM users_top_tracks uta
+    JOIN artists a ON uta.artist_id = a.artist_id
+    WHERE uta.user_id = $1 AND uta.time_range = $2
+    ORDER BY uta.rank ASC;
+        """
+    return await db.fetch(query, user_id, time_range)
 
 
 async def get_track_play_counts(user_id, db):
     query = """
-        SELECT track_name, artist_name, album_image_url, COUNT(*) AS track_play_counts
-        FROM listening_history 
-        WHERE user_id = $1 
-        GROUP BY track_name, artist_name, album_image_url 
+        SELECT 
+            t.name, 
+            t.artist_name, 
+            t.album_image_url, 
+            COUNT(*) AS track_play_counts
+        FROM listening_history lh 
+        JOIN tracks t ON lh.track_id = t.track_id
+        WHERE lh.user_id = $1 
+        GROUP BY t.name, t.artist_name, t.album_image_url 
         ORDER BY track_play_counts DESC 
         LIMIT 10;
     """
@@ -40,13 +67,18 @@ async def get_track_play_counts(user_id, db):
 
 async def get_daily_play_counts(user_id, db):
     query = """
-        SELECT DATE(played_at) AS play_date, COUNT(*) AS daily_play_count
-        FROM listening_history 
-        WHERE user_id = $1 
-        GROUP BY play_date 
-        ORDER BY play_date DESC;
+        SELECT 
+            DATE(lh.played_at) AS play_date, 
+            t.name, 
+            COUNT(*) AS daily_play_count
+        FROM listening_history lh
+        JOIN tracks t ON lh.track_id = t.track_id
+        WHERE lh.user_id = $1
+        GROUP BY play_date, t.name
+        ORDER BY play_date DESC, daily_play_count DESC;
     """
     return await db.fetch(query, user_id)
+
 
 
 
@@ -75,40 +107,51 @@ async def get_current_playing(token):
 #SUM of the listening minutes and hours for entire history
 async def get_total_listening_time(user_id, db):
     query = """
-        SELECT SUM(duration_ms) 
-        FROM listening_history 
-        WHERE user_id = $1 AND duration_ms IS NOT NULL;
+        SELECT SUM(t.duration_ms) 
+        FROM listening_history lh
+        JOIN tracks t ON lh.track_id = t.track_id
+        WHERE lh.user_id = $1 AND t.duration_ms IS NOT NULL;
     """
     total_duration_ms = await db.fetchval(query, user_id) or 0
-    return total_duration_ms // 60000, total_duration_ms // 3600000
+    
+    # Convert milliseconds to minutes and hours
+    total_minutes = total_duration_ms // 60000
+    total_hours = total_duration_ms // 3600000
+    
+    return total_minutes, total_hours
+
 
 
 #listening minutes and hours for today
 async def get_total_listening_time_today(user_id, db):
     today = datetime.today().date()
     query = """
-        SELECT SUM(duration_ms) 
-        FROM listening_history 
-        WHERE user_id = $1 AND DATE(played_at) = $2 AND duration_ms IS NOT NULL;
+        SELECT SUM(t.duration_ms) 
+        FROM listening_history lh
+        JOIN tracks t ON lh.track_id = t.track_id
+        WHERE lh.user_id = $1 AND DATE(lh.played_at) = $2 AND t.duration_ms IS NOT NULL;
     """
     total_today_duration = await db.fetchval(query, user_id, today) or 0
     return total_today_duration // 60000, total_today_duration // 3600000
 
+
 #listening minutes and hours for each day (grouped by day)
 async def get_daily_listening_time(user_id, db):
     query = """
-        SELECT DATE(played_at) AS play_date, 
-               SUM(duration_ms)/60000 AS total_minutes, 
-               SUM(duration_ms)/3600000 AS total_hours 
-        FROM listening_history 
-        WHERE user_id = $1 AND duration_ms IS NOT NULL 
-        GROUP BY play_date 
+        SELECT DATE(lh.played_at) AS play_date, 
+               SUM(t.duration_ms) / 60000 AS total_minutes, 
+               SUM(t.duration_ms) / 3600000 AS total_hours 
+        FROM listening_history lh
+        JOIN tracks t ON lh.track_id = t.track_id
+        WHERE lh.user_id = $1 AND t.duration_ms IS NOT NULL
+        GROUP BY play_date
         ORDER BY play_date DESC;
     """
     return await db.fetch(query, user_id)
 
-# This is the existing code for the group_by_time_period function
-from datetime import datetime, timedelta
+
+
+
 
 def group_by_time_period(records):
     now = datetime.now()
@@ -158,10 +201,11 @@ def group_by_time_period(records):
 # Ensure the data is passed correctly to your template (highlighted change)
 async def complete_listening_history(user_id, db, limit, offset):
     query = """
-        SELECT played_at, track_name, artist_name, duration_ms
-        FROM listening_history 
-        WHERE user_id = $1 
-        ORDER BY played_at DESC 
+        SELECT lh.played_at, t.name, t.artist_name, t.duration_ms
+        FROM listening_history lh
+        JOIN tracks t ON lh.track_id = t.track_id
+        WHERE lh.user_id = $1 
+        ORDER BY lh.played_at DESC 
         LIMIT $2 OFFSET $3;
     """
     records = await db.fetch(query, user_id, limit, offset)
@@ -169,8 +213,15 @@ async def complete_listening_history(user_id, db, limit, offset):
 
 
 
+
 async def get_top_genres(user_id, db):
-    query = "SELECT genres FROM users_top_artists WHERE user_id = $1;"
+    query = """
+        SELECT a.genres
+        FROM listening_history lh
+        JOIN tracks t ON lh.track_id = t.track_id
+        JOIN artists a ON t.artist_id = a.artist_id
+        WHERE lh.user_id = $1;
+    """
     artist_genres = await db.fetch(query, user_id)
 
     genres_count = Counter()
@@ -180,6 +231,7 @@ async def get_top_genres(user_id, db):
 
     top_genres = genres_count.most_common(5)
     return top_genres  # Return the list of tuples (genre, count)
+
 
 
 
@@ -260,7 +312,7 @@ async def update_user_music_data(user_id, token, data_type, time_range):
             await top_tracks_to_database(top_tracks, user_id, time_range, token)
         elif data_type == "recent_tracks":
             recent_tracks = await get_recently_played_tracks(token)
-            await recents_to_database(recent_tracks, user_id)
+            await recents_to_database(user_id, recent_tracks, token)
     else:
         print(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
 

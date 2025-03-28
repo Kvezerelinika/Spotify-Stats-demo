@@ -14,15 +14,19 @@ async def fetch_spotify_data(url: str, token: str, retries: int = 5, method_name
                 print(f"Rate limit hit in {method_name}. Retrying after {retry_after} seconds...")
                 await asyncio.sleep(retry_after)
             elif response.status_code == 200:
-                json_response = response.json()  # No need to await here
-                #print(f"{method_name} - JSON Response:", json_response)  # Debugging line
-                return json_response  # Return the JSON response directly
+                try:
+                    json_response = response.json()  # No need to await here
+                    return json_response  # Return the JSON response directly
+                except ValueError as e:
+                    print(f"Error decoding JSON in {method_name}: {e}")
+                    raise HTTPException(status_code=500, detail=f"Error decoding JSON in {method_name}")
             elif response.status_code == 204:  # Handle No Content (currently no track playing)
                 print(f"{method_name} - No track currently playing.")
                 return None  # Return None for no track playing
             else:
                 raise HTTPException(status_code=response.status_code, detail=f"Error in {method_name}: {response.text}")
     raise HTTPException(status_code=500, detail=f"Failed in {method_name} after multiple attempts.")
+
 
 
 
@@ -40,7 +44,13 @@ async def get_top_artists(token: str, time_range: str):
 
 async def get_recently_played_tracks(token: str):
     url = f"{SPOTIFY_API_URL}/me/player/recently-played?limit=50"
-    return await fetch_spotify_data(url, token, method_name="get_recently_played_tracks")
+    response = await fetch_spotify_data(url, token, method_name="get_recently_played_tracks")
+    
+    if response and isinstance(response, dict) and "items" in response:
+        return response["items"]  # Return the list of tracks
+    else:
+        print("No recent tracks found or invalid response format.")
+        return []
 
 
 async def get_top_tracks(token: str, time_range: str):
@@ -63,22 +73,35 @@ async def get_all_artists(token: str, artist_id: str):
             raise Exception(f"Error in get_all_artists: {response.status_code} - {response.text}")
 
 
-
-def get_all_albums(token: str, album_id: str):
+async def get_all_albums(token: str, album_id: str):
     url = f"{SPOTIFY_API_URL}/albums/{album_id}"
-    response = httpx.get(url, headers={"Authorization": f"Bearer {token}"})
-    return response.json() if response.status_code == 200 else {"error in get_all_albums": response.text}
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        
+    # Check for successful response and return data, or handle errors
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return {"error in get_all_albums": response.text}
 
 
-async def get_track(token: str, track_ids: list):
+
+async def get_track(token: str, track_ids: list): 
     print("Starting to get_tracks from spotify_api.py")
     print("Track_ids: ", track_ids)
 
     url = f"{SPOTIFY_API_URL}/tracks?ids={','.join(track_ids)}"
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        
         if response.status_code == 200:
-            return response.json()  # Return the JSON response
+            try:
+                json_response = response.json()
+                return json_response  # Return the JSON response
+            except Exception as e:
+                print(f"Error parsing JSON from get_track: {e}")
+                return None  # Return None if parsing fails
         elif response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 2))
             print(f"Rate limit hit in get_track. Retrying after {retry_after} seconds...")
@@ -86,6 +109,7 @@ async def get_track(token: str, track_ids: list):
         else:
             print(f"Error in get_track: {response.text}")  # Log the error
             raise Exception(f"Error in get_track: {response.status_code} - {response.text}")
+
 
 
 

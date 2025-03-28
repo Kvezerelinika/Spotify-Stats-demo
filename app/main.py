@@ -216,32 +216,17 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
             update_user_music_data(user_id, token, "recent_tracks", time_range)
         )
 
-        (
-            user_info,
-            top_artist_list,
-            top_tracks_list,
-            track_play_counts,
-            daily_play_count,
-            total_play_count,
-            total_play_today,
-            total_listened_minutes,
-            total_listened_hours,
-            daily_listening_time,
-            top_genres,
-            records_by_time,
-        ) = await asyncio.gather(
-            get_user_info(user_id, db),
-            get_top_artists_db(user_id, db, time_range),
-            get_top_tracks_db(user_id, db),
-            get_track_play_counts(user_id, db),
-            get_daily_play_counts(user_id, db),
-            get_total_play_count(user_id, db),
-            get_total_play_today(user_id, db),
-            get_total_listening_time(user_id, db),
-            get_daily_listening_time(user_id, db),
-            get_top_genres(user_id, db),
-            complete_listening_history(user_id, db, limit, offset),
-        )
+        user_info = await get_user_info(user_id, db)
+        top_artist_list = await get_top_artists_db(user_id, db, time_range)
+        top_tracks_list = await get_top_tracks_db(user_id, db, time_range)
+        track_play_counts = await get_track_play_counts(user_id, db)
+        daily_play_count = await get_daily_play_counts(user_id, db)
+        total_play_count = await get_total_play_count(user_id, db)
+        total_play_today = await get_total_play_today(user_id, db)
+        total_listened_minutes = await get_total_listening_time(user_id, db)
+        total_listened_hours = await get_daily_listening_time(user_id, db)
+        top_genres = await get_top_genres(user_id, db)
+        records_by_time = await complete_listening_history(user_id, db, limit, offset)
 
         playing_now_data = await get_current_playing(token) or {
             "track_name": "N/A",
@@ -259,27 +244,23 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
 
     context = {
         "request": request,
-        "user_id": request.session["user_id"],
+        "user_info": user_info,
+        "top_artist_list": top_artist_list,
+        "top_tracks_list": top_tracks_list,
         "track_play_counts": track_play_counts,
-        "daily_play_counts": daily_play_count,
+        "daily_play_count": daily_play_count,
         "total_play_count": total_play_count,
         "total_play_today": total_play_today,
-        "top_artist_list": top_artist_list,
-        "top_genres": top_genres,
-        "top_tracks_list": top_tracks_list,
         "total_listened_minutes": total_listened_minutes,
         "total_listened_hours": total_listened_hours,
-        "daily_listening_time": daily_listening_time,
-        "user_image": user_info[7] if user_info else None,
-        "user_name": user_info[1] if user_info else "Unknown User",
-        "track_name": playing_now_data.get("track_name"),
-        "artist_name": playing_now_data.get("artist_name", "Unknown Artist"),
-        "album_img": playing_now_data.get("album_image_url"),
+        "top_genres": top_genres,
         "records_by_time": records_by_time,
+        "playing_now_data": playing_now_data,
         "current_time_range": time_range
     }
 
     return templates.TemplateResponse("dashboard.html", context)
+
 
 
 
