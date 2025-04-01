@@ -78,14 +78,15 @@ async def update_artist_details(token, artist_ids):
 
         # Process artist_ids in batches of 50
         for i in range(0, len(artist_ids), 50):
-            batch_artist_ids = artist_ids[i:i+50]
+            batch_artist_ids = artist_ids[i:i+50]  # Select a batch of 50 artist IDs
+            
+            try:
+                # Fetch all artist details in one request
+                artists_data = await get_all_artists(token, batch_artist_ids)
+                artists_list = artists_data.get("artists", [])  # Extract artist details list
 
-            for artist_id in batch_artist_ids:
-                # Fetch the artist details from Spotify API
-                try:
-                    artist_details = await get_all_artists(token, artist_id)
-
-                    # Extract necessary details
+                for artist_details in artists_list:
+                    artist_id = artist_details["id"]
                     artist_name = artist_details["name"]
                     genres = artist_details.get("genres", [])  # Ensure genres is always a list
                     if not genres:
@@ -101,11 +102,11 @@ async def update_artist_details(token, artist_ids):
                         artist_id, artist_name, genres, image_url, spotify_url, followers, popularity, uri
                     ))
 
-                except Exception as e:
-                    print(f"Failed to get artist details for {artist_id}: {e}")
-                    continue  # Skip to the next artist
+            except Exception as e:
+                print(f"Failed to get artist details for batch {batch_artist_ids}: {e}")
+                continue  # Skip to the next batch
 
-            # After processing 50 artist IDs, update the database
+            # After processing a batch, update the database
             if artist_updates:
                 insert_or_update_query = """
                     INSERT INTO artists (artist_id, name, genres, image_url, spotify_url, followers, popularity, uri)
@@ -120,10 +121,7 @@ async def update_artist_details(token, artist_ids):
                         popularity = EXCLUDED.popularity,
                         uri = EXCLUDED.uri
                 """
-                print("Finished inserting artist details into the database...")
 
-
-                # Execute the insert/update queries for this batch of artists
                 async with db.transaction():
                     await db.executemany(insert_or_update_query, artist_updates)
 
@@ -139,6 +137,7 @@ async def update_artist_details(token, artist_ids):
     finally:
         print("Closing the database connection for update_artist_details...")
         await db.close()
+
 
 
 
@@ -201,6 +200,8 @@ async def update_tracks_details(track_ids, token):
     try:
         track_updates = []
         track_artist_relationships = []  # List to store track-artist relationships
+        artists_id_to_add = set()
+        album_ids_to_add = set()
 
         # Split the track_ids into batches of 50
         batch_size = 50
@@ -209,12 +210,8 @@ async def update_tracks_details(track_ids, token):
         for batch in track_id_batches:
             try:
                 # Fetch the details for the current batch of tracks
-                tracks_details = await get_track(token, batch)  # Assuming get_track can handle a batch
+                tracks_details = await get_track(token, batch)
 
-                artists_id_to_add = set()
-                album_ids_to_add = set()  # Set to store new album_ids to add
-
-                # Iterate over the returned details of the batch
                 for track_details in tracks_details.get("tracks", []):
                     if not track_details:
                         continue  # Skip if track details are missing
@@ -222,25 +219,22 @@ async def update_tracks_details(track_ids, token):
                     track_id = track_details.get("id")
                     track_name = track_details.get("name", "Unknown")
                     
-                    # Collect all artist IDs for this track
+                    # Collect artist IDs and names
                     artist_ids = [artist.get("id", "Unknown") for artist in track_details.get("artists", [])]
-
-                    # Collect all artist names for this track
                     artist_names = [artist.get("name", "Unknown") for artist in track_details.get("artists", [])]
-
-                    # Ensure 'album' exists before accessing its properties
+                    
+                    # Collect album details
                     album_details = track_details.get("album", {})
                     album_id = album_details.get("id", "Unknown")
                     album_name = album_details.get("name", "Unknown")
                     
-                    # Select the highest resolution album image available
+                    # Select highest resolution album image
                     album_image_url = next((img["url"] for img in album_details.get("images", []) if img["height"] == 640), None)
-                    if not album_image_url and album_details.get("images"):  # Fallback to the first available image
+                    if not album_image_url and album_details.get("images"):  # Fallback
                         album_image_url = album_details["images"][0]["url"]
 
-                    # Convert release_date string to a datetime.date object
                     release_date_str = album_details.get("release_date", None)
-                    release_date = datetime.strptime(release_date_str, "%Y-%m-%d").date() if release_date_str else None
+                    release_date = parse_release_date(release_date_str)
 
                     duration_ms = track_details.get("duration_ms", 0)
                     is_explicit = track_details.get("explicit", False)
@@ -248,63 +242,71 @@ async def update_tracks_details(track_ids, token):
                     popularity = track_details.get("popularity", 0)
                     track_number = track_details.get("track_number", 0)
 
-                    # Add all artist_ids to the set of artists to add
+                    # Add to artist and album sets
                     artists_id_to_add.update(artist_ids)
-
-                    # Add the album_id to the set of albums to add
                     album_ids_to_add.add(album_id)
 
-                    # Prepare the update data for the track
-                    track_updates.append((track_id, track_name, album_id, spotify_url, duration_ms, popularity, 
-                                        is_explicit, track_number, release_date, album_image_url, album_name))
+                    # Prepare track update data
+                    track_updates.append((
+                        track_id, track_name, album_id, artist_ids[0] if artist_ids else None,  
+                        spotify_url, duration_ms, popularity, is_explicit, track_number,
+                        release_date, album_image_url, album_name, artist_names[0] if artist_names else None
+                    ))
 
-                    # Prepare the track-artist relationships
+                    # Prepare track-artist relationships
                     for artist_id in artist_ids:
                         track_artist_relationships.append((track_id, artist_id))
-
-                # Commit artists before albums and tracks
-                if artists_id_to_add:
-                    await update_artist_details(token, list(artists_id_to_add))
-
-                # Commit albums after artists
-                if album_ids_to_add:
-                    await all_albums_to_database(token, list(album_ids_to_add))
 
             except Exception as batch_error:
                 print(f"Error fetching details for batch {batch}: {batch_error}")
                 continue
 
-        # After the batch process, insert/update the tracks
+        # Process all artists first
+        if artists_id_to_add:
+            await update_artist_details(token, list(artists_id_to_add))
+
+        # Process albums after artists
+        if album_ids_to_add:
+            await all_albums_to_database(token, list(album_ids_to_add))
+
+        # Insert tracks last
         if track_updates:
             print("Inserting/updating track details into the database...")
             insert_or_update_query = """
                 INSERT INTO tracks (
-                    track_id, name, album_id, spotify_url, duration_ms, popularity, 
-                    explicit, track_number, album_release_date, album_image_url, album_name
+                    track_id, name, album_id, artist_id, spotify_url, duration_ms, popularity, 
+                    explicit, track_number, album_release_date, album_image_url, album_name, artist_name
                 ) 
                 VALUES 
-                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT (track_id) 
                 DO UPDATE SET
-                    name = EXCLUDED.name,
-                    album_id = EXCLUDED.album_id,
-                    spotify_url = EXCLUDED.spotify_url,
-                    duration_ms = EXCLUDED.duration_ms,
-                    popularity = EXCLUDED.popularity,
-                    explicit = EXCLUDED.explicit,
-                    track_number = EXCLUDED.track_number,
-                    album_release_date = EXCLUDED.album_release_date,
-                    album_image_url = EXCLUDED.album_image_url,
-                    album_name = EXCLUDED.album_name
+                    name = COALESCE(EXCLUDED.name, tracks.name),
+                    album_id = COALESCE(EXCLUDED.album_id, tracks.album_id),
+                    artist_id = CASE 
+                        WHEN tracks.artist_id IS NULL THEN EXCLUDED.artist_id
+                        ELSE tracks.artist_id
+                    END,
+                    artist_name = CASE 
+                        WHEN tracks.artist_name IS NULL THEN EXCLUDED.artist_name
+                        ELSE tracks.artist_name
+                    END,
+                    spotify_url = COALESCE(EXCLUDED.spotify_url, tracks.spotify_url),
+                    duration_ms = COALESCE(EXCLUDED.duration_ms, tracks.duration_ms),
+                    popularity = COALESCE(EXCLUDED.popularity, tracks.popularity),
+                    explicit = COALESCE(EXCLUDED.explicit, tracks.explicit),
+                    track_number = COALESCE(EXCLUDED.track_number, tracks.track_number),
+                    album_release_date = COALESCE(EXCLUDED.album_release_date, tracks.album_release_date),
+                    album_image_url = COALESCE(EXCLUDED.album_image_url, tracks.album_image_url),
+                    album_name = COALESCE(EXCLUDED.album_name, tracks.album_name)
             """
 
-            # Execute the insert/update queries for all tracks
             async with db.transaction():
                 print("Executing batch insert/update for tracks...")
                 await db.executemany(insert_or_update_query, track_updates)
                 print("Track details inserted/updated successfully.")
 
-        # Insert track-artist relationships into the track_artists table
+        # Insert track-artist relationships
         if track_artist_relationships:
             print("Inserting track-artist relationships into the database...")
             insert_track_artist_query = """
@@ -313,7 +315,6 @@ async def update_tracks_details(track_ids, token):
                 ON CONFLICT (track_id, artist_id) DO NOTHING
             """
 
-            # Execute the insert queries for all track-artist relationships
             async with db.transaction():
                 await db.executemany(insert_track_artist_query, track_artist_relationships)
                 print("Track-artist relationships inserted successfully.")
@@ -321,12 +322,46 @@ async def update_tracks_details(track_ids, token):
         else:
             print("No tracks to enrich for update_tracks_details.")
 
+        # If some artist_names were missing, re-call the update function
+        await retry_update_tracks_if_needed(db, token)
+
     except Exception as e:
         print(f"Error enriching tracks database in crud.py for update_tracks_details: {e}")
 
     finally:
         await db.close()
 
+
+
+
+async def retry_update_tracks_if_needed(db, token):
+    # Check for missing artist names in the tracks table
+    missing_artist_names_query = """
+        SELECT track_id FROM tracks WHERE artist_name IS NULL OR artist_name = 'Unknown'
+    """
+    result = await db.fetch(missing_artist_names_query)
+
+    if result:  # If there are any tracks with missing artist names
+        missing_track_ids = [row['track_id'] for row in result]
+        print(f"Retrying update for tracks with missing artist names: {missing_track_ids}")
+        await update_tracks_details(missing_track_ids, token)  # Recall the update function
+
+
+def parse_release_date(release_date_str):
+    """Parses Spotify's release date format correctly, even if it's only a year or year-month format."""
+    if not release_date_str:
+        return None  # Handle missing values gracefully
+
+    try:
+        if len(release_date_str) == 4:  # Only year provided (e.g., "2008")
+            return datetime.strptime(release_date_str, "%Y").date()
+        elif len(release_date_str) == 7:  # Year and month provided (e.g., "2008-06")
+            return datetime.strptime(release_date_str, "%Y-%m").date()
+        else:  # Full date (e.g., "2008-06-15")
+            return datetime.strptime(release_date_str, "%Y-%m-%d").date()
+    except ValueError as e:
+        print(f"Error parsing release date '{release_date_str}': {e}")
+        return None  # Return None if there's an unexpected format
 
 
 
@@ -366,6 +401,7 @@ async def recents_to_database(user_id, recent_tracks, token):
         async with db_connection.transaction():
             # First, update track details for the tracks being added
             if track_ids:
+                print("FROM RECENT TO TRACKS UPDATE IDS: ", track_ids)
                 await update_tracks_details(list(track_ids), token)
 
             # Prepare the insert query
@@ -425,24 +461,18 @@ async def all_albums_to_database(token, album_ids):
         async with db.transaction():
             tot_albums = []
 
-            # Helper function to batch album_ids into chunks of 20
-            def chunkify(lst, size):
-                return [lst[i:i + size] for i in range(0, len(lst), size)]
+            # Split album_ids into chunks of 20 (Spotify API limit)
+            album_chunks = [album_ids[i:i + 20] for i in range(0, len(album_ids), 20)]
 
-            # Split album_ids into chunks of 20
-            album_chunks = chunkify(album_ids, 20)
-
-            # Process each chunk asynchronously
             for chunk in album_chunks:
-                # Get the album details for all albums in this chunk
-                album_details_list = await asyncio.gather(*[get_all_albums(token, album_id) for album_id in chunk])
+                # Fetch album details for the batch
+                album_details_response = await get_all_albums(token, chunk)
 
-                for album_details in album_details_list:
-                    # Ensure the response is a dictionary
-                    if not isinstance(album_details, dict):
-                        print(f"Error: Expected dictionary for album, got {type(album_details)}")
-                        continue
+                if "albums" not in album_details_response:
+                    print(f"Unexpected response format: {album_details_response}")
+                    continue
 
+                for album_details in album_details_response["albums"]:
                     # Extract necessary details with safety checks
                     album_id = album_details.get("id")
                     name = album_details.get("name")
@@ -455,13 +485,7 @@ async def all_albums_to_database(token, album_ids):
                         continue
 
                     # Process the album data, e.g., saving to the database
-                    tot_albums.append({
-                        "album_id": album_id,
-                        "name": name,
-                        "artist_id": artist_id,
-                        "image_url": image_url,
-                        "spotify_url": spotify_url,
-                    })
+                    tot_albums.append((album_id, name, artist_id, image_url, spotify_url))
 
             # Insert the album data into PostgreSQL
             if tot_albums:
@@ -470,19 +494,11 @@ async def all_albums_to_database(token, album_ids):
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (album_id) DO NOTHING;
                 """
-                # Using asyncpg to execute the query
-                await db.executemany(query, [
-                    (album['album_id'], album['name'], album['artist_id'], album['image_url'], album['spotify_url'])
-                    for album in tot_albums
-                ])
+                await db.executemany(query, tot_albums)
                 print("Album details inserted successfully.")
 
     except Exception as e:
         print(f"Error processing albums: {e}")
-
-
-
-
 
 
 

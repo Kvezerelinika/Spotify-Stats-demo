@@ -91,30 +91,47 @@ h2, ul, li {
 }
 
 
-/* Parent container to align both sections side by side */
+/* Center everything */
 .top-sections-container {
     display: flex;
-    justify-content: center;
-    align-items: start;
-    gap: 20px; /* Space between the two sections */
+    flex-direction: column; /* Stack elements vertically */
+    align-items: center; /* Center horizontally */
     width: 90%;
     max-width: 1200px;
     margin: 20px auto;
 }
 
+/* Move time range selector to the top */
+.time-range-selector {
+    align-self: flex-start; /* Align to the left */
+    margin-bottom: 20px; /* Add spacing */
+}
+
+/* Adjust form inside the time range selector */
+.time-range-selector form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Make top artists and top tracks appear side by side */
+.top-lists-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px; /* Space between lists */
+    width: 100%;
+}
+
 /* Ensure both sections have the same width */
 .container-top-artists, .container-top-tracks {
     width: 48%; /* Make both sections equal width */
+    max-width: 500px;
 }
 
 /* Standardize card layout */
 .card {
     width: 100%;
-    max-width: 500px;
-    margin: auto;
-    padding: 15px;
     text-align: center;
-    counter-reset: item-counter; /* Reset counter for each list */
 }
 
 /* Standardize artist items */
@@ -125,40 +142,29 @@ h2, ul, li {
     padding: 5px;
     border-radius: 5px;
     transition: background 0.2s ease-in-out;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
 }
 
-/* Move image first */
+/* Ensure images are well aligned */
 .artist-item img {
     width: 50px;
     height: 50px;
     object-fit: cover;
-    object-position: top;
-    border: 1px solid rgb(0, 0, 0);
     border-radius: 5px;
-    margin: 3px; /* Space between the image and text */
-}
-
-/* Add numbering after the image */
-.artist-item::before {
-    counter-increment: item-counter; /* Increment counter */
-    content: counter(item-counter) ". "; /* Add numbering */
-    font-weight: bold;
-    margin-right: 5px; /* Space between number and text */
-    color: white;
+    margin: 3px;
 }
 
 /* Ensure text remains readable */
 .artist-item a {
-    text-decoration: none !important;
-    color: white !important;
+    text-decoration: none;
+    color: white;
     font-weight: bold;
     display: flex;
     align-items: center;
     gap: 10px;
 }
+
+
+
 
 
 
@@ -356,6 +362,7 @@ h2, ul, li {
 
 .tab-content {
     display: none; /* Hide all tab content by default */
+    color: white; /* Default text color for tab content */
 }
 
 

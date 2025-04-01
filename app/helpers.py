@@ -33,18 +33,20 @@ async def get_top_artists_db(user_id, db, time_range):
 
 async def get_top_tracks_db(user_id, db, time_range):
     query = """
-    SELECT 
-        uta.artist_id,  -- From users_top_artists
-        uta.rank,       -- From users_top_artists
-        a.name,         -- From artists
-        a.image_url,    -- From artists
-        a.spotify_url   -- From artists
-    FROM users_top_tracks uta
-    JOIN artists a ON uta.artist_id = a.artist_id
-    WHERE uta.user_id = $1 AND uta.time_range = $2
-    ORDER BY uta.rank ASC;
-        """
+        SELECT 
+            t.name,                -- Track name
+            a.name AS artist_name, -- Artist name
+            t.album_image_url,     -- Album image URL
+            t.spotify_url,         -- Spotify URL
+            utt.rank               -- Rank
+        FROM users_top_tracks utt
+        JOIN tracks t ON utt.track_id = t.track_id
+        JOIN artists a ON t.artist_id = a.artist_id
+        WHERE utt.user_id = $1 AND utt.time_range = $2
+        ORDER BY utt.rank ASC;
+    """
     return await db.fetch(query, user_id, time_range)
+
 
 
 async def get_track_play_counts(user_id, db):
@@ -69,24 +71,13 @@ async def get_daily_play_counts(user_id, db):
     query = """
         SELECT 
             DATE(lh.played_at) AS play_date, 
-            t.name, 
             COUNT(*) AS daily_play_count
         FROM listening_history lh
-        JOIN tracks t ON lh.track_id = t.track_id
         WHERE lh.user_id = $1
-        GROUP BY play_date, t.name
-        ORDER BY play_date DESC, daily_play_count DESC;
+        GROUP BY play_date
+        ORDER BY play_date DESC;
     """
     return await db.fetch(query, user_id)
-
-
-
-
-async def get_total_play_count(user_id, db):
-    query = "SELECT COUNT(*) FROM listening_history WHERE user_id = $1;"
-    result = await db.fetchval(query, user_id)
-    return result or 0
-
 
 async def get_total_play_today(user_id, db):
     today = datetime.today().date()
@@ -95,13 +86,10 @@ async def get_total_play_today(user_id, db):
     return result or 0
 
 
-async def get_current_playing(token):
-    #cursor.execute("SELECT track_name, artist_name, album_image_url FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT 1;", (user_id,))
-    #data = cursor.fetchone()
-    #return {"track_name": data[0], "artist_name": data[1], "album_image_url": data[2]} if data else {}
-
-    # Return the data directly (FastAPI will handle the JSON conversion automatically)
-    return await get_now_playing(token)  # ✅ FIXED: Returns the actual data
+async def get_total_play_count(user_id, db):
+    query = "SELECT COUNT(*) FROM listening_history WHERE user_id = $1;"
+    result = await db.fetchval(query, user_id)
+    return result or 0
 
 
 #SUM of the listening minutes and hours for entire history
@@ -119,6 +107,19 @@ async def get_total_listening_time(user_id, db):
     total_hours = total_duration_ms // 3600000
     
     return total_minutes, total_hours
+
+
+
+async def get_current_playing(token):
+    #cursor.execute("SELECT track_name, artist_name, album_image_url FROM listening_history WHERE user_id = %s ORDER BY played_at DESC LIMIT 1;", (user_id,))
+    #data = cursor.fetchone()
+    #return {"track_name": data[0], "artist_name": data[1], "album_image_url": data[2]} if data else {}
+
+    # Return the data directly (FastAPI will handle the JSON conversion automatically)
+    return await get_now_playing(token)  # ✅ FIXED: Returns the actual data
+
+
+
 
 
 
@@ -226,7 +227,7 @@ async def get_top_genres(user_id, db):
 
     genres_count = Counter()
     for row in artist_genres:
-        genres = row["genres"].split(',') if row["genres"] else []
+        genres = row["genres"] if row["genres"] else []
         genres_count.update(genres)
 
     top_genres = genres_count.most_common(5)
@@ -286,35 +287,59 @@ async def get_last_update_from_db(user_id, data_type, time_range):
         await db.close()  # Close connection properly
 
 
+import pytz
 from datetime import datetime, timedelta
+import logging
 
 async def update_user_music_data(user_id, token, data_type, time_range):
+    # Fetch last update from DB
     last_update = await get_last_update_from_db(user_id, data_type, time_range)
-    current_time = datetime.now()
+    print(f"Last update for {user_id}, {data_type}, {time_range}: {last_update}")
+
+    # Convert last_update to UTC if it's naive
+    if last_update and last_update.tzinfo is None:
+        last_update = pytz.UTC.localize(last_update)  # Make it aware if naive
+
+    # Ensure current time is in UTC
+    current_time = datetime.utcnow().replace(tzinfo=pytz.UTC)
+    print(f"Current time: {current_time}")
 
     # Define update intervals based on data_type
     intervals = {
         "top_artists": timedelta(weeks=12 if time_range == "long_term" else 6 if time_range == "medium_term" else 4),
         "top_tracks": timedelta(days=1 if time_range == "short_term" else 7 if time_range == "medium_term" else 28),
-        "recent_tracks": timedelta(minutes=10),
+        "recent_tracks": timedelta(minutes=50),
     }
     
-    interval = intervals.get(data_type, timedelta(days=1))  # Default to 1 day
+    interval = intervals[data_type]  # Assume valid `data_type`, remove redundant `.get()`
+    print(f"Interval for {data_type}: {interval}")
 
+    # ✅ Optimization: Don't update if last update was recent
     if not last_update or current_time - last_update > interval:
-        print(f"Updating {data_type} data after {last_update} for user {user_id}, time range {time_range}...")
+        logging.info(f"Updating {data_type} data for user {user_id}, time range {time_range}...")
 
-        if data_type == "top_artists":
-            top_artists = await get_top_artists(token, time_range)
-            await top_artists_to_database(top_artists, user_id, time_range, current_time, token)
-        elif data_type == "top_tracks":
-            top_tracks = await get_top_tracks(token, time_range)
-            await top_tracks_to_database(top_tracks, user_id, time_range, token)
-        elif data_type == "recent_tracks":
-            recent_tracks = await get_recently_played_tracks(token)
-            await recents_to_database(user_id, recent_tracks, token)
+        # Function mapping to simplify data updates
+        update_functions = {
+            "top_artists": lambda: get_top_artists(token, time_range),
+            "top_tracks": lambda: get_top_tracks(token, time_range),
+            "recent_tracks": lambda: get_recently_played_tracks(token),
+        }
+
+        db_functions = {
+            "top_artists": lambda data: top_artists_to_database(data, user_id, time_range, current_time, token),
+            "top_tracks": lambda data: top_tracks_to_database(data, user_id, time_range, token),
+            "recent_tracks": lambda data: recents_to_database(user_id, data, token),
+        }
+
+        # Fetch data and update the database
+        data = await update_functions[data_type]()
+        await db_functions[data_type](data)
     else:
-        print(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
+        logging.info(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
+
+
+
+
 
 
 

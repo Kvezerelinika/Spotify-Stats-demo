@@ -74,7 +74,7 @@ async def layout_page(request: Request):
     user_data = user_info_to_database(user_profile)
     user_id = user_data[0][0]
 
-    cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
+    cursor.execute("SELECT image_url, display_name FROM users WHERE id = %s;", (user_id,))
     user_info = cursor.fetchone()  # Fetch only once
     if user_info:
         user_image, user_name = user_info  # Unpack values safely
@@ -223,8 +223,7 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         daily_play_count = await get_daily_play_counts(user_id, db)
         total_play_count = await get_total_play_count(user_id, db)
         total_play_today = await get_total_play_today(user_id, db)
-        total_listened_minutes = await get_total_listening_time(user_id, db)
-        total_listened_hours = await get_daily_listening_time(user_id, db)
+        total_listened_minutes, total_listened_hours = await get_total_listening_time(user_id, db)
         top_genres = await get_top_genres(user_id, db)
         records_by_time = await complete_listening_history(user_id, db, limit, offset)
 
@@ -256,7 +255,12 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
         "top_genres": top_genres,
         "records_by_time": records_by_time,
         "playing_now_data": playing_now_data,
-        "current_time_range": time_range
+        "current_time_range": time_range,
+        "user_image": user_info[3] if user_info else None,
+        "user_name": user_info[1] if user_info else "Unknown User",
+        "track_name": playing_now_data.get("track_name"),
+        "artist_name": playing_now_data.get("artists"),
+        "album_img": playing_now_data.get("album_image_url")
     }
 
     return templates.TemplateResponse("dashboard.html", context)

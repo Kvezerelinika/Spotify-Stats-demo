@@ -216,20 +216,21 @@ document.getElementById('more-btn').addEventListener('click', function() {
 <div class="content">
     <div id="dashboard" class="tab-content">
         <h2>DASHBOARD</h2>
-        <div class="top-sections-container">
-            <div class="time-range-selector">
-                <!-- Form to change the time range -->
-                <form method="get" action="{{ url_for('dashboard') }}">
-                    <label for="time_range">Select Time Range:</label>
-                    <select name="time_range" id="time_range" onchange="this.form.submit()">
-                        <!-- Check the current time range and set as selected -->
-                        <option value="short_term" {% if current_time_range == 'short_term' %}selected{% endif %}>Short Term</option>
-                        <option value="medium_term" {% if current_time_range == 'medium_term' %}selected{% endif %}>Medium Term</option>
-                        <option value="long_term" {% if current_time_range == 'long_term' %}selected{% endif %}>Long Term</option>
-                    </select>
-                </form>
-            </div>
+        <!-- Time range selector (moved to the top) -->
+        <div class="time-range-selector">
+            <form method="get" action="{{ url_for('dashboard') }}">
+                <label for="time_range">Select Time Range:</label>
+                <select name="time_range" id="time_range" onchange="this.form.submit()">
+                    <option value="short_term" {% if current_time_range == 'short_term' %}selected{% endif %}>Short Term</option>
+                    <option value="medium_term" {% if current_time_range == 'medium_term' %}selected{% endif %}>Medium Term</option>
+                    <option value="long_term" {% if current_time_range == 'long_term' %}selected{% endif %}>Long Term</option>
+                </select>
+            </form>
+        </div>
     
+        <!-- Top artists and top tracks lists -->
+        <div class="top-lists-container">
+            <!-- Top Artists -->
             <div class="container-top-artists">
                 {% if top_artist_list %}
                     <div class="card bg-dark text-white">
@@ -252,13 +253,14 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% endif %}
             </div>
     
+            <!-- Top Tracks -->
             <div class="container-top-tracks">
                 {% if top_tracks_list %}
                     <div class="card bg-dark text-white">
                         <div class="card-body">
                             <h2>Your Top Tracks</h2>
                             <div class="artist-list">
-                                {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
+                                {% for track_name, artist_name, album_image_url, spotify_url, rank in top_tracks_list %}
                                     <div class="artist-item">
                                         <a href="{{ spotify_url }}" target="_blank">
                                             <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
@@ -275,6 +277,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
             </div>
         </div>
     </div>
+</div>
     
     
 
@@ -294,7 +297,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% for track in records_by_time['Today'] %}
                     <div class="track">
                         <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                        <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                     </div>
                 {% endfor %}
             </div>
@@ -310,7 +313,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% for track in records_by_time['Yesterday'] %}
                     <div class="track">
                         <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                        <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                     </div>
                 {% endfor %}
             </div>
@@ -326,7 +329,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% for track in records_by_time['This Week'] %}
                     <div class="track">
                         <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                        <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                     </div>
                 {% endfor %}
             </div>
@@ -342,7 +345,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% for track in records_by_time['Last Week'] %}
                     <div class="track">
                         <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                        <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                     </div>
                 {% endfor %}
             </div>
@@ -358,7 +361,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% for track in records_by_time['This Month'] %}
                     <div class="track">
                         <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                        <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                     </div>
                 {% endfor %}
             </div>
@@ -374,7 +377,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% for track in records_by_time['Older'] %}
                     <div class="track">
                         <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                        <div class="track-info">{{ track['track_name'] }} by {{ track['artist_name'] }}</div>
+                        <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                     </div>
                 {% endfor %}
             </div>
@@ -407,10 +410,10 @@ document.getElementById('more-btn').addEventListener('click', function() {
     </div>
 
     <h2>Total Plays Per Day</h2>
-    {% if daily_play_counts %}
+    {% if daily_play_count %}
         <ul>
-        {% for play_date, count in daily_play_counts %}
-            <li>{{ play_date }}: {{ count }} listens</li>
+        {% for play_date, daily_play_count in daily_play_count %}
+            <li>{{ play_date }}: {{ daily_play_count }} listens</li>
         {% endfor %}
         </ul>
     {% else %}

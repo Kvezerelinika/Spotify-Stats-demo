@@ -37,15 +37,27 @@ async def get_top_artists(token: str, time_range: str):
     if time_range not in ["long_term", "medium_term", "short_term"]:
         raise ValueError("Invalid time range")
 
+    # Construct the URL
     url = f"{SPOTIFY_API_URL}/me/top/artists?time_range={time_range}&limit=50"
-    print("URL in get_top_artist: ", url)
+    
+    # Log the URL being used
+    print("URL in get_top_artists: ", url)
+    
+    # Fetch data from Spotify API
     return await fetch_spotify_data(url, token, method_name=f"get_top_artists_{time_range}")
 
 
 async def get_recently_played_tracks(token: str):
+    # Construct the URL for recently played tracks
     url = f"{SPOTIFY_API_URL}/me/player/recently-played?limit=50"
+    
+    # Log the URL being used
+    print("URL in get_recently_played_tracks: ", url)
+    
+    # Fetch data from Spotify API
     response = await fetch_spotify_data(url, token, method_name="get_recently_played_tracks")
     
+    # Check if the response is valid and contains the 'items' key
     if response and isinstance(response, dict) and "items" in response:
         return response["items"]  # Return the list of tracks
     else:
@@ -58,12 +70,19 @@ async def get_top_tracks(token: str, time_range: str):
     if time_range not in ["long_term", "medium_term", "short_term"]:
         raise ValueError("Invalid time range")
     
+    # Construct the URL
     url = f"{SPOTIFY_API_URL}/me/top/tracks?time_range={time_range}&limit=50"
+    
+    # Log the URL being used
+    print("URL in get_top_tracks: ", url)
+    
+    # Fetch data from Spotify API
     return await fetch_spotify_data(url, token, method_name=f"get_top_tracks_{time_range}")
 
 
+
 async def get_all_artists(token: str, artist_id: str):
-    url = f"{SPOTIFY_API_URL}/artists/{artist_id}"
+    url = f"{SPOTIFY_API_URL}/artists?ids={','.join(artist_id)}"
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         if response.status_code == 200:
@@ -74,7 +93,7 @@ async def get_all_artists(token: str, artist_id: str):
 
 
 async def get_all_albums(token: str, album_id: str):
-    url = f"{SPOTIFY_API_URL}/albums/{album_id}"
+    url = f"{SPOTIFY_API_URL}/albums?ids={','.join(album_id)}"
     
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
