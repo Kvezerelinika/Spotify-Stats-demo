@@ -1,20 +1,26 @@
-from fastapi import FastAPI, Request, Query, HTTPException, UploadFile, File
+from fastapi import FastAPI, Request, Query, HTTPException, UploadFile, File, APIRouter, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-import time, asyncio, zipfile, json, logging
+import time, asyncio, zipfile, json, logging, traceback
 from io import BytesIO
 
 
 # Import Spotify helper functions
-from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database
+from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database, get_current_user
 from app.spotify_api import get_spotify_user_profile
 from app.database import get_db_connection
 from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data, complete_listening_history)
 
+
+# Function to fetch user data from Spotify
+import time
+import httpx
+
 # Initialize FastAPI only once
 app = FastAPI()
+router = APIRouter()
 
 # ✅ Session Middleware (Make sure secret_key is correctly set)
 app.add_middleware(SessionMiddleware, secret_key="your_super_secret_key", session_cookie="spotify_session")
@@ -65,23 +71,22 @@ async def root(request: Request):
     })
 
 @app.get("/layout")
-async def layout_page(request: Request):
-    db = get_db_connection()
-    cursor = db.cursor()
+async def layout_page(request: Request, user_data: dict = Depends(get_current_user)):
+    db = await get_db_connection()  # Get the async connection
 
-    token = request.session.get("spotify_token")
-    user_profile = get_spotify_user_profile(token)
-    user_data = user_info_to_database(user_profile)
-    user_id = user_data[0][0]
+    user_id = user_data.get("user_id")
+    print(f"User ID from session: {user_id}")  
 
-    cursor.execute("SELECT image_url, display_name FROM users WHERE id = %s;", (user_id,))
-    user_info = cursor.fetchone()  # Fetch only once
+    user_info = await db.fetchrow("SELECT image_url, display_name FROM users WHERE user_id = $1;", user_id)
+
+    await db.close()  # Properly close the async connection
+
     if user_info:
-        user_image, user_name = user_info  # Unpack values safely
+        user_image, user_name = user_info["image_url"], user_info["display_name"]
     else:
-        user_image, user_name = None, "Unknown User"  # Handle missing data
+        user_image, user_name = None, "Unknown User"
 
-    return templates.TemplateResponse("layout.html", {
+    return templates.TemplateResponse("layout.html", context={
         "request": request,
         "user_id": user_id,
         "user_image": user_image,
@@ -145,9 +150,7 @@ async def callback(request: Request):
         print(f"Error during token exchange: {str(e)}")
         return {"error": f"Error during token exchange: {str(e)}"}
 
-# Function to fetch user data from Spotify
-import time
-import httpx
+
 
 async def get_spotify_user_profile(token):
     url = "https://api.spotify.com/v1/me"
@@ -176,36 +179,15 @@ async def get_spotify_user_profile(token):
 # 🎵 2️⃣ Fetch & Display Spotify Data
 # ---------------------------------------
 
-import asyncio, asyncpg
-from concurrent.futures import ThreadPoolExecutor
-import traceback, os
-
-
-from fastapi import Request, APIRouter
-from fastapi.responses import RedirectResponse, JSONResponse
-import traceback
-
-router = APIRouter()
 
 @app.get("/dashboard")
-async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
+async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_data: dict = Depends(get_current_user)):
     db = None
     try:
-        token = request.session.get("spotify_token")
-        user_id = request.session.get("user_id")
 
-        if not token or not user_id:
-            return RedirectResponse(url="/login")
-
-        user_profile = await get_spotify_user_profile(token)
-        if not user_profile:
-            return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
-
-        user_data = await user_info_to_database(user_profile)
-        if user_data:
-            new_user_id = user_data[0][0]
-            if new_user_id != user_id:
-                request.session["user_id"] = new_user_id
+        token = user_data["token"]  # Extract token if needed
+        user_id = user_data["user_id"]  # Extract user_id if needed
+        print(f"User ID from session: {user_id}")
 
         db = await get_db_connection()
         time_range = request.query_params.get('time_range', 'medium_term')
@@ -243,6 +225,7 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0):
 
     context = {
         "request": request,
+        "user_id": user_id,
         "user_info": user_info,
         "top_artist_list": top_artist_list,
         "top_tracks_list": top_tracks_list,

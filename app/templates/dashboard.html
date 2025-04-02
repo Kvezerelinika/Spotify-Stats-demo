@@ -183,8 +183,8 @@ document.getElementById('more-btn').addEventListener('click', function() {
     <div class="now-playing">
         <img src="{{ album_img }}" alt="Album Image">
         <div class="text-container">
-            <div class="text-container">
-                <span class="title">Now Playing:</span>
+            <span class="title">Now Playing:</span>
+            <div class="track-info">
                 <span class="track-name">{{ track_name }}</span>
                 <span class="artist-name">{{ artist_name }}</span>
             </div>
@@ -216,7 +216,6 @@ document.getElementById('more-btn').addEventListener('click', function() {
 <div class="content">
     <div id="dashboard" class="tab-content">
         <h2>DASHBOARD</h2>
-        <!-- Time range selector (moved to the top) -->
         <div class="time-range-selector">
             <form method="get" action="{{ url_for('dashboard') }}">
                 <label for="time_range">Select Time Range:</label>
@@ -228,9 +227,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
             </form>
         </div>
     
-        <!-- Top artists and top tracks lists -->
         <div class="top-lists-container">
-            <!-- Top Artists -->
             <div class="container-top-artists">
                 {% if top_artist_list %}
                     <div class="card bg-dark text-white">
@@ -239,10 +236,10 @@ document.getElementById('more-btn').addEventListener('click', function() {
                             <div class="artist-list">
                                 {% for artist in top_artist_list %}
                                     <div class="artist-item">
-                                        <a href="{{ artist[2] }}" target="_blank">
-                                            <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
-                                            <span class="artist-name">{{ artist[0] }}</span>
-                                        </a>
+                                        <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
+                                        <span class="rank_2">{{ loop.index }}</span>
+
+                                        <a href="{{ artist[2] }}" target="_blank" class="artist-name">{{ artist[0] }}</a>
                                     </div>
                                 {% endfor %}
                             </div>
@@ -253,7 +250,6 @@ document.getElementById('more-btn').addEventListener('click', function() {
                 {% endif %}
             </div>
     
-            <!-- Top Tracks -->
             <div class="container-top-tracks">
                 {% if top_tracks_list %}
                     <div class="card bg-dark text-white">
@@ -262,10 +258,10 @@ document.getElementById('more-btn').addEventListener('click', function() {
                             <div class="artist-list">
                                 {% for track_name, artist_name, album_image_url, spotify_url, rank in top_tracks_list %}
                                     <div class="artist-item">
-                                        <a href="{{ spotify_url }}" target="_blank">
-                                            <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
-                                            <span class="artist-name">{{ track_name }} by {{ artist_name }}</span>
-                                        </a>
+                                        <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
+                                        <span class="rank_2">{{ rank }}</span>
+
+                                        <a href="{{ spotify_url }}" target="_blank" class="artist-name">{{ track_name }} by {{ artist_name }}</a>
                                     </div>
                                 {% endfor %}
                             </div>

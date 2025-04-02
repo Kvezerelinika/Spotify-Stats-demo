@@ -2,16 +2,15 @@ import requests, os, time, httpx, json
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from app.database import get_db_connection
+from app.spotify_api import get_spotify_user_profile
 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import Request, HTTPException, status, FastAPI, Depends
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import JSONResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
 from fastapi_sessions.session_verifier import SessionVerifier
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import JSONResponse
 from starlette.requests import Request
-
-from fastapi.responses import JSONResponse
 
 load_dotenv()
 app = FastAPI()
@@ -244,3 +243,26 @@ async def user_info_to_database(user_profile):
     
     finally:
         await db.close()  # Close the connection asynchronously
+
+
+
+
+async def get_current_user(request: Request):
+    token = request.session.get("spotify_token")
+    user_id = request.session.get("user_id")
+
+    if not token or not user_id:
+        return RedirectResponse(url="/login")
+
+    user_profile = await get_spotify_user_profile(token)
+    if not user_profile:
+        return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
+
+    user_data = await user_info_to_database(user_profile)
+    if user_data:
+        new_user_id = user_data[0][0]
+        if new_user_id != user_id:
+            request.session["user_id"] = new_user_id
+            user_id = new_user_id  # Update user_id for further use
+
+    return {"token": token, "user_id": user_id}
