@@ -456,10 +456,11 @@ import asyncio
 async def all_albums_to_database(token, album_ids):
     print("Inserting album details into the database...")
     db = await get_db_connection()
-
+    
     try:
         async with db.transaction():
             tot_albums = []
+            new_artists = set()
 
             # Split album_ids into chunks of 20 (Spotify API limit)
             album_chunks = [album_ids[i:i + 20] for i in range(0, len(album_ids), 20)]
@@ -467,7 +468,7 @@ async def all_albums_to_database(token, album_ids):
             for chunk in album_chunks:
                 # Fetch album details for the batch
                 album_details_response = await get_all_albums(token, chunk)
-
+                
                 if "albums" not in album_details_response:
                     print(f"Unexpected response format: {album_details_response}")
                     continue
@@ -484,8 +485,18 @@ async def all_albums_to_database(token, album_ids):
                         print(f"Missing required album data for album {album_id}")
                         continue
 
-                    # Process the album data, e.g., saving to the database
+                    # Collect unique artist IDs
+                    new_artists.add(artist_id)
+                    
+                    # Store album data
                     tot_albums.append((album_id, name, artist_id, image_url, spotify_url))
+
+            # Update artist details in batches of 50 (Spotify API limit)
+            if new_artists:
+                artist_chunks = [list(new_artists)[i:i + 50] for i in range(0, len(new_artists), 50)]
+                for artist_chunk in artist_chunks:
+                    await update_artist_details(token, artist_chunk)
+                print("Artist details updated successfully.")
 
             # Insert the album data into PostgreSQL
             if tot_albums:
@@ -499,6 +510,20 @@ async def all_albums_to_database(token, album_ids):
 
     except Exception as e:
         print(f"Error processing albums: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -421,3 +421,10 @@ button#more-btn {
 button#more-btn:hover {
     background-color: #0056b3;
 }
+
+.hidden {
+    display: none !important;
+    visibility: hidden;
+    opacity: 0;
+}
+
