@@ -178,62 +178,81 @@ h2, ul, li {
 
 
 .now-playing {
-    display: flex;
-    align-items: center;
-    width: 80%;
-    max-width: 300px;
-    margin: auto;
-    margin-bottom: 20px;
-    background-color: #660761;
-    padding: 10px;
-    border-radius: 10px;
-    box-sizing: border-box;
-    overflow: hidden;
+    display: flex;  /* Creates a flex container for alignment and layout */
+    align-items: center;  /* Vertically centers the content inside the container */
+    width: 80%;  /* Sets the width of the container to 80% of its parent */
+    max-width: 300px;  /* Sets the maximum width to 300px */
+    margin: auto;  /* Centers the container horizontally within its parent */
+    margin-bottom: 20px;  /* Adds a 20px margin to the bottom */
+    background-color: #660761;  /* Sets the background color to a dark purple */
+    padding: 10px;  /* Adds 10px padding inside the container */
+    border-radius: 10px;  /* Rounds the corners of the container */
+    box-sizing: border-box;  /* Includes padding and borders in the total width/height */
+    overflow: hidden;  /* Hides any content that overflows the container */
 }
 
 .now-playing img {
-    width: 50px;
-    height: 50px;
-    object-fit: cover;
-    object-position: top;
-    border: 1px solid rgb(0, 0, 0);
-    margin-right: 10px; /* Space between image and text */
-    flex-shrink: 0; /* Prevents image from shrinking */
+    width: 50px;  /* Sets the width of the image to 50px */
+    height: 50px;  /* Sets the height of the image to 50px */
+    object-fit: cover;  /* Ensures the image covers the area without stretching */
+    object-position: top;  /* Aligns the image's top edge to the top of the container */
+    border: 1px solid rgb(0, 0, 0);  /* Adds a 1px solid black border around the image */
+    margin-right: 10px;  /* Adds a 10px space between the image and text */
+    flex-shrink: 0;  /* Prevents the image from shrinking when the container resizes */
+}
+
+.now-playing p {
+    color: white;  /* Sets the color of text in the <p> element to white */
 }
 
 .now-playing .text-container {
     display: flex;
     flex-direction: column;
-    align-items: flex-end; /* Align all text to the right */
-    text-align: right;
-    flex-grow: 1; /* Ensures text takes remaining space */
+    align-items: flex-end; /* Right-align all child elements */
+    text-align: right;     /* Align text itself to the right */
+    flex-grow: 1;
     overflow: hidden;
+    width: 100%;
+    padding-left: 60px;
 }
 
+
 .now-playing .title {
-    font-weight: bold;
-    color: #ffffff;
-    font-size: 14px;
-    margin-bottom: 3px;
-    white-space: nowrap; /* Keeps "Now Playing:" on one line */
+    font-weight: bold;  /* Makes the "Now Playing" title bold */
+    color: #ffffff;  /* Sets the color of the title text to white */
+    font-size: 14px;  /* Sets the font size of the title */
+    margin-bottom: 3px;  /* Adds 3px margin below the title */
+    white-space: nowrap;  /* Prevents the title from wrapping to the next line */
+    text-align: left;  /* Aligns the title to the left */
 }
 
 .now-playing .track-info {
     display: flex;
-    flex-direction: column; /* Track name & artist name on separate lines */
-    align-items: flex-end; /* Ensures text stays on the right */
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-end; /* Right-align track name and artist */
+    width: 100%;
 }
 
-.now-playing .track-name {
-    font-weight: bold;
-    font-size: 14px;
-    color: #fff;
-}
 
+.now-playing .track-name,
 .now-playing .artist-name {
-    font-size: 12px;
-    color: #ddd;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    display: block;
+    width: 100%;        /* Takes the full width of the container */
+    text-align: right;  /* Ensures text hugs the right */
 }
+
+
+.no-track {
+    color: white;  /* Makes the text color white */
+    font-size: 14px;  /* Sets the font size to 14px */
+    font-weight: bold;  /* Makes the text bold */
+}
+
+
 
 
 
