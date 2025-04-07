@@ -7,50 +7,51 @@
 {% block main %}
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const moreBtn = document.getElementById("more-btn");
-    if (moreBtn) {  // ✅ Check if the element exists before using it
-        moreBtn.addEventListener("click", function () {
-            console.log("More button clicked!");
-        });
-    } else {
-        console.error("More button not found!");
-    }
-
-    const searchBtn = document.getElementById("search-btn");
-    if (searchBtn) {
-        searchBtn.addEventListener("click", function () {
-            console.log("Search button clicked!");
-        });
-    } else {
-        console.error("Search button not found!");
-    }
-});
-
-
+    document.addEventListener("DOMContentLoaded", function () {
+        let currentPage = 1;
+        const moreBtn = document.getElementById("more-btn");
+    
+        if (moreBtn) {
+            moreBtn.addEventListener("click", function () {
+                currentPage += 1;
+    
+                fetch(`/get-more-history?page=${currentPage}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        for (const period in data) {
+                            const listId = period.toLowerCase().replace(/ /g, '-') + '-list';
+                            const listElement = document.getElementById(listId);
+                            if (listElement && data[period].length > 0) {
+                                data[period].forEach(track => {
+                                    const trackDiv = document.createElement('div');
+                                    trackDiv.className = 'track';
+    
+                                    const timeDiv = document.createElement('div');
+                                    timeDiv.className = 'track-time';
+                                    timeDiv.textContent = track.played_at;
+    
+                                    const infoDiv = document.createElement('div');
+                                    infoDiv.className = 'track-info';
+                                    infoDiv.textContent = `${track.name} by ${track.artist_name}`;
+    
+                                    trackDiv.appendChild(timeDiv);
+                                    trackDiv.appendChild(infoDiv);
+                                    listElement.appendChild(trackDiv);
+                                });
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Fetch error:', error));
+            });
+        } else {
+            console.error("More button not found!");
+        }
+    });
     </script>
+    
+    
 
 
-
-<script>
-document.getElementById('more-btn').addEventListener('click', function() {
-    // Fetch more records via AJAX (ensure that your server-side logic is set to handle this)
-    fetch('/get-more-history')  // Implement this route on the backend
-        .then(response => response.json())
-        .then(data => {
-            // Update the lists dynamically
-            for (const period in data) {
-                let listId = period.toLowerCase().replace(' ', '-') + '-list';
-                const listElement = document.getElementById(listId);
-                data[period].forEach(track => {
-                    const listItem = document.createElement('li');
-                    listItem.textContent = `${track.track_name} by ${track.artist_name} - Played at ${track.played_at}`;
-                    listElement.appendChild(listItem);
-                });
-            }
-        });
-});
-</script>
 
 <script>
     document.getElementById('timeRangeSelect').addEventListener('change', function() {
@@ -239,7 +240,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                     <span id="today-streams">{{ today_streams }}</span> streams, 
                     <span id="today-time">{{ today_time }}</span> total time
                 </h3>
-                <div class="track-list">
+                <div class="track-list" id="today-list">
                     {% for track in records_by_time['Today'] %}
                         <div class="track">
                             <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
@@ -255,7 +256,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                     <span id="yesterday-streams">{{ yesterday_streams }}</span> streams, 
                     <span id="yesterday-time">{{ yesterday_time }}</span> total time
                 </h3>
-                <div class="track-list">
+                <div class="track-list" id="yesterday-list">
                     {% for track in records_by_time['Yesterday'] %}
                         <div class="track">
                             <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
@@ -271,7 +272,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                     <span id="this-week-streams">{{ this_week_streams }}</span> streams, 
                     <span id="this-week-time">{{ this_week_time }}</span> total time
                 </h3>
-                <div class="track-list">
+                <div class="track-list" id="this-week-list">
                     {% for track in records_by_time['This Week'] %}
                         <div class="track">
                             <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
@@ -287,7 +288,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                     <span id="last-week-streams">{{ last_week_streams }}</span> streams, 
                     <span id="last-week-time">{{ last_week_time }}</span> total time
                 </h3>
-                <div class="track-list">
+                <div class="track-list" id="last-week-list">
                     {% for track in records_by_time['Last Week'] %}
                         <div class="track">
                             <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
@@ -303,7 +304,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                     <span id="this-month-streams">{{ this_month_streams }}</span> streams, 
                     <span id="this-month-time">{{ this_month_time }}</span> total time
                 </h3>
-                <div class="track-list">
+                <div class="track-list" id="this-month-list">
                     {% for track in records_by_time['This Month'] %}
                         <div class="track">
                             <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
@@ -319,7 +320,7 @@ document.getElementById('more-btn').addEventListener('click', function() {
                     <span id="older-streams">{{ older_streams }}</span> streams, 
                     <span id="older-time">{{ older_time }}</span> total time
                 </h3>
-                <div class="track-list">
+                <div class="track-list" id="older-list">
                     {% for track in records_by_time['Older'] %}
                         <div class="track">
                             <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>

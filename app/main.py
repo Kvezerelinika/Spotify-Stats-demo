@@ -253,9 +253,36 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
 
 
 
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+
+@app.get("/get-more-history")
+async def get_more_history(page: int = 1, db=Depends(get_db_connection), user_data: dict = Depends(get_current_user)):
+
+    user_id = user_data["user_id"]  # Extract user_id if needed
+
+    limit = 20
+    offset = (page - 1) * limit
+
+    grouped = await complete_listening_history(user_id, db, limit, offset)
+    print(f"Fetched page {page} with {len(grouped)} records.")
+    return JSONResponse(content=grouped)
 
 
 
+
+@app.get("/listening-history", response_class=HTMLResponse)
+async def show_listening_history(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(get_current_user)):
+    user_id = user_data["user_id"]
+    limit = 20
+    offset = 0
+
+    grouped_history = await complete_listening_history(user_id, db, limit, offset)
+
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "records_by_time": grouped_history  # 👈 match the name used in HTML
+    })
 
 
 
