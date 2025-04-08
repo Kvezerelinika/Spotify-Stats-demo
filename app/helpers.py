@@ -14,10 +14,24 @@ async def get_user_info(user_id, db):
 
 
 
+async def get_top_artists_db(user_id, db, time_range):
+    query = """
+        SELECT 
+            a.name, 
+            a.image_url, 
+            a.spotify_url,
+            uta.rank
+        FROM users_top_artists uta
+        JOIN artists a ON uta.artist_id = a.artist_id
+        WHERE uta.user_id = $1 
+        AND uta.time_range = $2
+        ORDER BY uta.rank ASC;
+    """
+    return await db.fetch(query, user_id, time_range)
 
 
 
-from sqlalchemy import select
+"""from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import UsersTopArtists, Artist  # Adjust your import path as needed
@@ -43,7 +57,7 @@ async def get_top_artists_db(user_id: str, db: AsyncSession, time_range: str):
             "rank": artist.rank
         }
         for artist in top_artists
-    ]
+    ]"""
 
 
 
