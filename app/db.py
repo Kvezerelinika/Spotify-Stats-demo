@@ -7,7 +7,7 @@ from sqlalchemy.types import ARRAY
 from sqlalchemy.sql import func
 
 
-DATABASE_URL = "postgresql://postgres:Manowar28@@@localhost/postgres"
+DATABASE_URL = "postgresql://postgres:Manowar28%40%40@localhost/postgres"
 
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -17,13 +17,13 @@ Base = declarative_base()
 class ListeningHistory(Base):
     __tablename__ = "listening_history"
 
-    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)  # Foreign key to User
-    track_id = Column(String, ForeignKey("tracks.track_id"), nullable=False)  # Foreign key to Track
-    played_at = Column(TIMESTAMP, nullable=False)  # Timestamp of when the track was played
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False, primary_key=True)  # Foreign key to User
+    track_id = Column(String, ForeignKey("tracks.track_id"), nullable=False, primary_key=True)  # Foreign key to Track
+    played_at = Column(TIMESTAMP, nullable=False, primary_key=True)  # Timestamp of when the track was played
 
     # Relationship with Users and Tracks
-    user = relationship("User", back_populates="listening_history")
-    track = relationship("Track", back_populates="listening_history")
+    users = relationship("User", back_populates="listening_history")
+    tracks = relationship("Track", back_populates="listening_history")
 
 
 class User(Base):
@@ -33,7 +33,7 @@ class User(Base):
     display_name = Column(String, nullable=True)
     profile_url = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
-    last_updated = Column(TIMESTAMP, default="now()")  # Default value 'now()' for timestamp
+    last_updated = Column(TIMESTAMP, default=func.now())  # Default value 'now()' for timestamp
     username = Column(String, nullable=False)  # assuming it's required (change if not)
     email = Column(String, nullable=False)     # assuming it's required (change if not)
     country = Column(String, nullable=True)
@@ -45,9 +45,9 @@ class User(Base):
     type = Column(String, nullable=True)
 
     # Add relationships if necessary (e.g., with listening_history, top_artists, etc.)
-    listening_history = relationship("ListeningHistory", back_populates="user")
-    top_artists = relationship("UsersTopArtists", back_populates="user")
-    top_tracks = relationship("UsersTopTracks", back_populates="user")
+    listening_history = relationship("ListeningHistory", back_populates="users")
+    users_top_artists = relationship("UsersTopArtists", back_populates="users")
+    users_top_tracks = relationship("UsersTopTracks", back_populates="users")
 
 class Track(Base):
     __tablename__ = "tracks"
@@ -55,7 +55,6 @@ class Track(Base):
     track_id = Column(String, primary_key=True)  # track_id is the primary key
     name = Column(String, nullable=False)  # Track name (cannot be null)
     album_id = Column(String, ForeignKey("albums.album_id"), nullable=True)  # Foreign key to album
-    artist_id = Column(String, ForeignKey("artists.artist_id"), nullable=True)  # Foreign key to artist
     spotify_url = Column(String, nullable=True)  # URL to the track on Spotify
     duration_ms = Column(Integer, nullable=True)  # Duration of the track in milliseconds
     popularity = Column(Integer, nullable=True)  # Popularity score of the track
@@ -64,14 +63,13 @@ class Track(Base):
     album_release_date = Column(Date, nullable=True)  # Album release date
     album_image_url = Column(String(255), nullable=True)  # URL of the album image
     album_name = Column(String(255), nullable=True)  # Name of the album
-    artist_name = Column(String(255), nullable=True)  # Name of the artist
+
 
     # Relationships
-    album = relationship("Album", back_populates="tracks")  # Relationship with Album
-    artist = relationship("Artist", back_populates="tracks")  # Relationship with Artist
-    listening_history = relationship("ListeningHistory", back_populates="track")  # Relationship with ListeningHistory
-    users_top_tracks = relationship("UsersTopTracks", back_populates="track")  # Relationship with UsersTopTracks
-    track_artists = relationship("TrackArtist", back_populates="track")  # Relationship with TrackArtist (many-to-many with Artist)
+    albums = relationship("Album", back_populates="tracks")  # Relationship with Album
+    listening_history = relationship("ListeningHistory", back_populates="tracks")  # Relationship with ListeningHistory
+    users_top_tracks = relationship("UsersTopTracks", back_populates="tracks")  # Relationship with UsersTopTracks
+    track_artists = relationship("TrackArtist", back_populates="tracks")  # Relationship with TrackArtist (many-to-many with Artist)
 
 
 
@@ -88,10 +86,9 @@ class Artist(Base):
     uri = Column(String(255))  # Spotify URI for the artist
 
 
-    tracks = relationship("Track", back_populates="artist")     # Relationship with Tracks
-    albums = relationship("Album", back_populates="artist")     # Relationship with Albums
-    track_artists = relationship("TrackArtist", back_populates="artist")     # Relationship with track_artists (many-to-many with Track)
-    users_top_artists = relationship("UsersTopArtist", back_populates="artist")     # Relationship with users_top_artists (many-to-many with User)
+    albums = relationship("Album", back_populates="artists")     # Relationship with Albums
+    track_artists = relationship("TrackArtist", back_populates="artists")     # Relationship with track_artists (many-to-many with Track)
+    users_top_artists = relationship("UsersTopArtists", back_populates="artists")     # Relationship with users_top_artists (many-to-many with User)
 
 
 class Album(Base):
@@ -106,8 +103,8 @@ class Album(Base):
     popularity = Column(Integer)  # Popularity score of the album
     label = Column(String(255))  # Label of the album (optional, max length 255 characters)
 
-    tracks = relationship("Track", back_populates="album")  # Relationship with Tracks
-    artist = relationship("Artist", back_populates="albums") # Relationship with Artist (optional, since artist_id can be NULL)
+    tracks = relationship("Track", back_populates="albums")  # Relationship with Tracks
+    artists = relationship("Artist", back_populates="albums") # Relationship with Artist (optional, since artist_id can be NULL)
 
 
 
@@ -121,8 +118,8 @@ class UsersTopArtists(Base):
     last_updated = Column(TIMESTAMP, default=func.now())  # Default value 'now()' for timestamp (correct usage)
 
     # Relationships to User and Artist (if needed)
-    user = relationship("User", back_populates="users_top_artists")
-    artist = relationship("Artist", back_populates="users_top_artists")
+    users = relationship("User", back_populates="users_top_artists")
+    artists = relationship("Artist", back_populates="users_top_artists")
 
 
 class UsersTopTracks(Base):
@@ -134,8 +131,8 @@ class UsersTopTracks(Base):
     time_range = Column(String, nullable=False)  # Time range for the top tracks (e.g., "short_term", "medium_term", "long_term")
     last_updated = Column(TIMESTAMP, default=func.now())  # Default value 'now()' for timestamp (correct usage)
 
-    user = relationship("User", back_populates="users_top_tracks")
-    track = relationship("Track", back_populates="users_top_tracks")  # Relationship to Track (if needed)
+    users = relationship("User", back_populates="users_top_tracks")
+    tracks = relationship("Track", back_populates="users_top_tracks")  # Relationship to Track (if needed)
 
 
 
@@ -146,5 +143,5 @@ class TrackArtist(Base):
     artist_id = Column(String, ForeignKey('artists.artist_id'), primary_key=True)
     artist_name = Column(String)
     
-    track = relationship('Track', back_populates='track_artists')
-    artist = relationship('Artist', back_populates='track_artists')
+    tracks = relationship('Track', back_populates='track_artists')
+    artists = relationship('Artist', back_populates='track_artists')
