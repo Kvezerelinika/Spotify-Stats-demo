@@ -1,4 +1,4 @@
-import requests, os, time, httpx, json
+import requests, os, time, httpx, json, redis
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from app.database import get_db_connection
@@ -11,24 +11,241 @@ from fastapi_sessions.session_verifier import SessionVerifier
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from starlette.requests import Request
+from starlette_session import SessionAutoloadMiddleware
+from starlette_session.backends.redis import RedisBackend
+from typing import Optional
+
+
 
 load_dotenv()
 app = FastAPI()
 
-backend = InMemoryBackend()
+# Production-level secret key
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")  # fallback only for dev
 
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")
-app.add_middleware(
-    SessionMiddleware,
-    SECRET_KEY="your_secret_key",  # Replace with a strong secret key
-    cookie_secure=True,            # Ensure cookies are only sent over HTTPS
-    cookie_httponly=True,          # Make cookies inaccessible via JavaScript
-    cookie_samesite="None"         # Allow cookies in cross-site requests (for OAuth)
-)
+# Redis backend for sessions
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+backend = RedisBackend(redis_url)
 
+# Middleware stack
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(SessionAutoloadMiddleware, backend=backend)
+
+class OAuthSettings:
+    def __init__(self):
+        self.SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
+        self.SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+        self.SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+        self.SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
+        self.SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+        self.SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
+
+    def __str__(self):
+        return f"OAuthSettings(client_id={self.SPOTIFY_CLIENT_ID}, redirect_uri={self.SPOTIFY_REDIRECT_URI})"
+
+
+class SpotifyOAuth:
+    def __init__(self, settings: OAuthSettings):
+        self.settings = settings
+
+    def get_spotify_login_url(self, request: Request) -> str:
+        state = os.urandom(16).hex()
+        request.session["spotify_auth_state"] = state  # Save state in session
+        params = {
+            "client_id": self.settings.SPOTIFY_CLIENT_ID,
+            "response_type": "code",
+            "redirect_uri": self.settings.SPOTIFY_REDIRECT_URI,
+            "scope": self.settings.SCOPES,
+            "state": state
+        }
+        return f"{self.settings.SPOTIFY_AUTH_URL}?{urlencode(params)}"
+
+    async def get_spotify_token(self, code: str, state: str, request: Request) -> dict:
+        # Check that the 'state' matches
+        stored_state = request.session.get("spotify_auth_state")
+        if not stored_state or stored_state != state:
+            raise HTTPException(status_code=400, detail="State mismatch. Possible CSRF attack.")
+        
+        url = self.settings.SPOTIFY_TOKEN_URL
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        payload = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.settings.SPOTIFY_REDIRECT_URI,
+            "client_id": self.settings.SPOTIFY_CLIENT_ID,
+            "client_secret": self.settings.SPOTIFY_CLIENT_SECRET
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, data=payload)
+        
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Error fetching access token: {response.text}")
+        
+        token_info = response.json()
+        request.session["spotify_token"] = token_info.get("access_token")
+        request.session["refresh_token"] = token_info.get("refresh_token")
+        request.session["token_expires"] = time.time() + token_info.get("expires_in", 3600)  # Set expiration time
+
+        return token_info
+
+    def refresh_access_token(self, refresh_token: str) -> Optional[dict]:
+        url = self.settings.SPOTIFY_TOKEN_URL
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": self.settings.SPOTIFY_CLIENT_ID,
+            "client_secret": self.settings.SPOTIFY_CLIENT_SECRET
+        }
+
+        try:
+            response = requests.post(url, data=data)
+            response.raise_for_status()
+
+            new_token_data = response.json()
+
+            if "access_token" in new_token_data:
+                return new_token_data
+
+            print("Error refreshing token: Missing 'access_token' in response.", new_token_data)
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error refreshing token: {e}")
+            return None
+
+    def get_valid_token(self, request: Request) -> Optional[str]:
+        token = request.session.get("spotify_token")
+        refresh_token = request.session.get("refresh_token")
+        token_expires = request.session.get("token_expires")
+
+        # Check if the token is valid (not expired)
+        if token and token_expires and time.time() < token_expires:
+            return token  # Token is still valid
+
+        # If token is expired, try refreshing it using the refresh token
+        if refresh_token:
+            print("Token expired, attempting to refresh...")
+            new_token_data = self.refresh_access_token(refresh_token)
+            if new_token_data:
+                new_token = new_token_data.get("access_token")
+                expires_in = new_token_data.get("expires_in", 3600)  # Default to 3600 seconds if not provided
+                request.session["spotify_token"] = new_token
+                request.session["token_expires"] = time.time() + expires_in
+                print("Token refreshed successfully.")
+                return new_token
+
+        print("No valid token available.")
+        return None
+
+
+class SpotifyUser:
+    def __init__(self, access_token: str):
+        self.access_token = access_token
+
+    def get_user_profile(self) -> dict:
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        user_response = requests.get("https://api.spotify.com/v1/me", headers=headers)
+        
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=user_response.status_code, detail="Failed to fetch user data from Spotify")
+
+        return user_response.json()
+
+    async def store_user_info_to_database(self, user_profile: dict, db) -> Optional[dict]:
+        info_users = []
+        if isinstance(user_profile, dict):
+            # Extract user profile details
+            user_id = user_profile.get("id")
+            display_name = user_profile.get("display_name")
+            profile_url = user_profile.get("external_urls", {}).get("spotify")
+            image_url = user_profile.get("images", [{}])[0].get("url")
+            username = user_profile.get("display_name")
+            email = user_profile.get("email", "unknown_email@example.com")
+            country = user_profile.get("country")
+            product = user_profile.get("product")
+            followers = str(user_profile.get("followers", {}).get("total", 0))
+            external_urls = user_profile.get("external_urls", {}).get("spotify")
+            href = user_profile.get("href")
+            uri = user_profile.get("uri")
+            user_type = user_profile.get("type")
+
+            info_users.append(
+                (user_id, display_name, profile_url, image_url, username, email, country, product, 
+                 followers, external_urls, href, uri, user_type)
+            )
+
+            if info_users:
+                await db.executemany(
+                    """
+                    INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
+                                       followers, external_urls, href, uri, type, last_updated) 
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
+                    ON CONFLICT (user_id) DO UPDATE 
+                    SET display_name = EXCLUDED.display_name, 
+                        profile_url = EXCLUDED.profile_url,
+                        image_url = EXCLUDED.image_url,
+                        username = EXCLUDED.username, 
+                        email = EXCLUDED.email, 
+                        country = EXCLUDED.country, 
+                        product = EXCLUDED.product, 
+                        followers = EXCLUDED.followers, 
+                        external_urls = EXCLUDED.external_urls, 
+                        href = EXCLUDED.href, 
+                        uri = EXCLUDED.uri, 
+                        type = EXCLUDED.type, 
+                        last_updated = NOW()
+                    """, 
+                    info_users
+                )
+                return user_profile
+            else:
+                print("No user data to insert.")
+                return None
+
+
+class SpotifyHandler:
+    def __init__(self, oauth_settings: OAuthSettings, spotify_oauth: SpotifyOAuth):
+        self.oauth_settings = oauth_settings
+        self.spotify_oauth = spotify_oauth
+
+    async def handle_spotify_callback(self, request: Request) -> dict:
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+
+        if not code or not state:
+            return {"error": "Authorization failed"}
+
+        token_info = await self.spotify_oauth.get_spotify_token(code, state, request)
+        
+        access_token = token_info.get("access_token")
+        
+        user = SpotifyUser(access_token)
+        user_profile = user.get_user_profile()
+
+        # Store user information in the database
+        db = await get_db_connection()  # Ensure get_db_connection() is defined elsewhere
+        await user.store_user_info_to_database(user_profile, db)
+
+        return {"user_profile": user_profile, "access_token": access_token}
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+# OAuth-related settings
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")  # Make sure this is set in .env
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
@@ -211,7 +428,7 @@ async def user_info_to_database(user_profile):
 
                 # Insert or update user info in the database
                 await db.executemany(
-                    """
+                    "
                     INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
                                        followers, external_urls, href, uri, type, last_updated) 
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
@@ -229,7 +446,7 @@ async def user_info_to_database(user_profile):
                         uri = EXCLUDED.uri, 
                         type = EXCLUDED.type, 
                         last_updated = NOW()
-                    """, 
+                    ", 
                     info_users
                 )
                 return info_users
@@ -266,3 +483,4 @@ async def get_current_user(request: Request):
             user_id = new_user_id  # Update user_id for further use
 
     return {"token": token, "user_id": user_id}
+"""
