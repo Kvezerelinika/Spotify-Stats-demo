@@ -5,10 +5,11 @@ from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 import time, asyncio, zipfile, json, logging, traceback
 from io import BytesIO
+from contextlib import asynccontextmanager
 
 
 # Import Spotify helper functions
-from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database, get_current_user
+from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database, get_current_user#, SpotifyOAuth, OAuthSettings
 from app.spotify_api import get_spotify_user_profile
 from app.database import get_db_connection
 from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data, complete_listening_history)
@@ -18,9 +19,46 @@ from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, g
 import time
 import httpx
 
+
+"""@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ✅ Startup logic
+    settings = OAuthSettings()
+    token_refresher = SpotifyOAuth(settings)
+
+    # Save for access from other parts of the app if needed
+    app.state.token_refresher = token_refresher
+
+    # Replace with your real refresh token
+    refresh_token = "your_refresh_token"
+
+    app.state.token_task = asyncio.create_task(auto_refresh_token(token_refresher, refresh_token))
+
+    yield
+
+    # ✅ Shutdown logic
+    app.state.token_task.cancel()
+    try:
+        await app.state.token_task
+    except asyncio.CancelledError:
+        pass
+"""
 # Initialize FastAPI only once
-app = FastAPI()
+app = FastAPI() #(lifespan=lifespan)
 router = APIRouter()
+
+"""
+# ✅ Helper to refresh token every hour
+async def auto_refresh_token(oauth: SpotifyOAuth, refresh_token: str):
+    while True:
+        new_token = oauth.refresh_access_token(refresh_token)
+        if new_token:
+            print("Refreshed token:", new_token["access_token"])
+        else:
+            print("Failed to refresh token.")
+        await asyncio.sleep(3600)  # Sleep for an hour
+
+"""
 
 # ✅ Session Middleware (Make sure secret_key is correctly set)
 app.add_middleware(SessionMiddleware, secret_key="your_super_secret_key", session_cookie="spotify_session")

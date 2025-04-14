@@ -11,9 +11,9 @@ from fastapi_sessions.session_verifier import SessionVerifier
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from starlette.requests import Request
-from starlette_session import SessionAutoloadMiddleware
-from starlette_session.backends.redis import RedisBackend
-from typing import Optional
+#from starlette_session import SessionAutoloadMiddleware
+#from starlette_session.backends.redis import RedisBackend
+#from typing import Optional
 
 
 
@@ -21,16 +21,18 @@ load_dotenv()
 app = FastAPI()
 
 # Production-level secret key
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")  # fallback only for dev
+#SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")  # fallback only for dev
 
 # Redis backend for sessions
-redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-backend = RedisBackend(redis_url)
+#redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+#backend = RedisBackend(redis_url)
 
 # Middleware stack
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-app.add_middleware(SessionAutoloadMiddleware, backend=backend)
+#app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+#app.add_middleware(SessionAutoloadMiddleware, backend=backend)
 
+
+"""
 class OAuthSettings:
     def __init__(self):
         self.SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
@@ -101,7 +103,6 @@ class SpotifyOAuth:
         try:
             response = requests.post(url, data=data)
             response.raise_for_status()
-
             new_token_data = response.json()
 
             if "access_token" in new_token_data:
@@ -177,7 +178,7 @@ class SpotifyUser:
 
             if info_users:
                 await db.executemany(
-                    """
+                    "
                     INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
                                        followers, external_urls, href, uri, type, last_updated) 
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
@@ -195,7 +196,7 @@ class SpotifyUser:
                         uri = EXCLUDED.uri, 
                         type = EXCLUDED.type, 
                         last_updated = NOW()
-                    """, 
+                    ", 
                     info_users
                 )
                 return user_profile
@@ -229,19 +230,19 @@ class SpotifyHandler:
 
         return {"user_profile": user_profile, "access_token": access_token}
 
-
-
-
-
-
-
-
-
-
-
-
-
 """
+
+
+
+
+
+
+
+
+
+
+
+
 # OAuth-related settings
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -428,7 +429,7 @@ async def user_info_to_database(user_profile):
 
                 # Insert or update user info in the database
                 await db.executemany(
-                    "
+                    """
                     INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
                                        followers, external_urls, href, uri, type, last_updated) 
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
@@ -446,7 +447,7 @@ async def user_info_to_database(user_profile):
                         uri = EXCLUDED.uri, 
                         type = EXCLUDED.type, 
                         last_updated = NOW()
-                    ", 
+                    """, 
                     info_users
                 )
                 return info_users
@@ -483,4 +484,3 @@ async def get_current_user(request: Request):
             user_id = new_user_id  # Update user_id for further use
 
     return {"token": token, "user_id": user_id}
-"""

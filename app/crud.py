@@ -1,9 +1,149 @@
 from app.database import get_db_connection
 from app.spotify_api import get_all_artists, get_track, get_all_albums
-import json, asyncpg
-from datetime import datetime
-import psycopg2  # Assuming you are using PostgreSQL
+import json, time
 from datetime import datetime, timedelta
+
+"""
+class SpotifyDataSaver:
+    def __init__(self, token: str, user_id: str):
+        self.token = token
+        self.user_id = user_id
+        self.db = None
+
+    async def connect_db(self):
+        self.db = await get_db_connection()
+        if not self.db:
+            raise Exception("Failed to connect to the database.")
+        
+    async def close_db(self):
+        if self.db:
+            await self.db.close()
+
+    async def top_artists_to_database(self, top_artists: str, time_range: str, current_time: str):
+        "Saves user's top artists to database"
+        await self.connect_db()
+
+        try:
+            existing_artist_query = "SELECT artist_id FROM artists;"
+            existing_artists_result = await self.db.fetch(existing_artist_query)
+            existing_artist_ids = {row["artist_id"] for row in existing_artists_result}
+
+            new_artist_ids = [artist["id"] for artist in top_artists["items"] if artist["id"] not in existing_artist_ids]
+
+            if new_artist_ids:
+                await self.update_artist_details(new_artist_ids)
+
+                existing_artists_result = await self.db.fetch(existing_artist_query)
+                existing_artist_ids = {row ["artist_id"] for row in existing_artists_result}
+
+            delete_query = "DELETE FROM users_top_artists WHERE user_id = $1 AND time_range = $2;"
+            
+            await self.db.execute(delete_query, self.user_id, time_range)
+
+            top_artist_records = [
+                (
+                    self.user_id,
+                    artist["id"],
+                    index + 1,
+                    time_range,
+                    current_time
+                )
+                for index, artist in enumerate(top_artists["items"])
+                if artist["id"] in existing_artist_ids
+            ]
+
+            if top_artist_records:
+                insert_query = "
+                    INSERT INTO users_top_artists (user_id, artist_id, rank, time_range, last_updated) VALUES ($1, $2, $3, $4, $5);"
+                
+                await self.db.executemany(insert_query, top_artist_records)
+                print("Top artists data inserted successfully.")
+
+        except Exception as e:
+            print(f"[error] save_top_artists: {e}")
+
+        finally:
+            await self.close_db()
+
+
+
+    async def update_artist_details(self, artist_ids: list[str]):
+        "Updates the artists table with the given artist details in batches of 50."
+        print("Enriching artist details in the database...")
+        if not self.db:
+            raise Exception("Database connection not initialized. Call connect_db() first.")
+
+        try:
+            artist_updates = []
+
+            # Process artist_ids in batches of 50
+            for i in range(0, len(artist_ids), 50):
+                batch_artist_ids = artist_ids[i:i+50]  # Select a batch of 50 artist IDs
+                
+                try:
+                    # Fetch all artist details in one request
+                    artists_data = await get_all_artists(self.token, batch_artist_ids)
+                    artists_list = artists_data.get("artists", [])  # Extract artist details list
+
+                    for artist_details in artists_list:
+                        artist_id = artist_details["id"]
+                        artist_name = artist_details["name"]
+                        genres = artist_details.get("genres", [])  # Ensure genres is always a list
+                        if not genres:
+                            genres = None  # Handle empty genres properly
+                        image_url = artist_details["images"][0]["url"] if artist_details.get("images") else None
+                        spotify_url = artist_details["external_urls"]["spotify"]
+                        followers = artist_details["followers"]["total"]
+                        popularity = artist_details["popularity"]
+                        uri = artist_details["uri"]
+
+                        # Prepare the artist data for the update
+                        artist_updates.append((
+                            artist_id, artist_name, genres, image_url, spotify_url, followers, popularity, uri
+                        ))
+
+                except Exception as e:
+                    print(f"Failed to get artist details for batch {batch_artist_ids}: {e}")
+                    continue  # Skip to the next batch
+
+                # After processing a batch, update the database
+                if artist_updates:
+                    insert_or_update_query = "
+                        INSERT INTO artists (artist_id, name, genres, image_url, spotify_url, followers, popularity, uri)
+                        VALUES ($1, $2, $3::TEXT[], $4, $5, $6, $7, $8)
+                        ON CONFLICT (artist_id)
+                        DO UPDATE SET
+                            name = EXCLUDED.name,
+                            genres = EXCLUDED.genres,
+                            image_url = EXCLUDED.image_url,
+                            spotify_url = EXCLUDED.spotify_url,
+                            followers = EXCLUDED.followers,
+                            popularity = EXCLUDED.popularity,
+                            uri = EXCLUDED.uri
+                    "
+
+                    async with self.db.transaction():
+                        await self.db.executemany(insert_or_update_query, artist_updates)
+
+                    # Reset artist_updates for the next batch
+                    artist_updates = []
+
+            if not artist_ids:
+                print("No artist data to enrich.")
+
+        except Exception as e:
+            print(f"Database insertion error in update_artist_details: {e}")
+
+"""
+
+
+
+
+
+
+
+
+
 
 async def top_artists_to_database(top_artists, user_id, time_range, current_time, token):
     """Saves top artists rankings into users_top_artists and ensures artist details are inserted first."""
@@ -622,10 +762,7 @@ def process_data(data):
         print("Unexpected response format:", data)
 
 
-import json
-import time
-from app.spotify_api import get_track
-from fastapi import Request
+
 
 async def get_tracks(token, track_ids):
     batch_size = 20  # Spotify allows up to 50 tracks per request
