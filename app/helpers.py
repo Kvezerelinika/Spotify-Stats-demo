@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from collections import Counter
 
 from app.spotify_api import get_top_artists, get_top_tracks, get_recently_played_tracks, get_now_playing
-from app.crud import top_artists_to_database, top_tracks_to_database, recents_to_database
+from app.crud import SpotifyDataSaver
 from app.database import get_db_connection
 
 async def get_user_info(user_id, db):
@@ -331,7 +331,7 @@ async def update_user_music_data(user_id, token, data_type, time_range):
 
     # Convert last_update to UTC if it's naive
     if last_update and last_update.tzinfo is None:
-        last_update = pytz.UTC.localize(last_update)  # Make it aware if naive
+        last_update = pytz.UTC.localize(last_update)
 
     # Ensure current time is in UTC
     current_time = datetime.utcnow().replace(tzinfo=pytz.UTC)
@@ -343,32 +343,29 @@ async def update_user_music_data(user_id, token, data_type, time_range):
         "top_tracks": timedelta(days=1 if time_range == "short_term" else 7 if time_range == "medium_term" else 28),
         "recent_tracks": timedelta(minutes=50),
     }
-    
-    interval = intervals[data_type]  # Assume valid `data_type`, remove redundant `.get()`
+
+    interval = intervals[data_type]
     print(f"Interval for {data_type}: {interval}")
 
-    # ✅ Optimization: Don't update if last update was recent
     if not last_update or current_time - last_update > interval:
         logging.info(f"Updating {data_type} data for user {user_id}, time range {time_range}...")
 
-        # Function mapping to simplify data updates
-        update_functions = {
-            "top_artists": lambda: get_top_artists(token, time_range),
-            "top_tracks": lambda: get_top_tracks(token, time_range),
-            "recent_tracks": lambda: get_recently_played_tracks(token),
-        }
+        async with SpotifyDataSaver(token, user_id) as saver:
+            if data_type == "top_artists":
+                top_artists_data = await get_top_artists(token, time_range)
+                await saver.top_artists_to_database(top_artists_data, time_range, current_time)
 
-        db_functions = {
-            "top_artists": lambda data: top_artists_to_database(data, user_id, time_range, current_time, token),
-            "top_tracks": lambda data: top_tracks_to_database(data, user_id, time_range, token),
-            "recent_tracks": lambda data: recents_to_database(user_id, data, token),
-        }
+            elif data_type == "top_tracks":
+                top_tracks_data = await get_top_tracks(token, time_range)
+                await saver.top_tracks_to_database(top_tracks_data, time_range)
 
-        # Fetch data and update the database
-        data = await update_functions[data_type]()
-        await db_functions[data_type](data)
+            elif data_type == "recent_tracks":
+                recent_tracks_data = await get_recently_played_tracks(token)
+                await saver.recents_to_database(recent_tracks_data)
+
     else:
         logging.info(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
+
 
 
 
