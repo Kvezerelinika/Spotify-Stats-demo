@@ -136,6 +136,194 @@ class SpotifyDataSaver:
 
 """
 
+"""
+    async def top_tracks_to_database(self, top_tracks: str, time_range: str):
+        print("Inserting top tracks data into the database...")
+        await self.connect_db() 
+
+        try:
+            # Step 1: Delete existing top tracks for this user and time range
+            async with self.db.transaction():  
+                delete_existing_data_query = """
+                    DELETE FROM users_top_tracks WHERE user_id = $1 AND time_range = $2;
+                """
+                await self.db.execute(delete_existing_data_query, self.user_id, time_range)
+
+            # Step 2: Prepare new top tracks data
+            top_records = []
+            top_track_ids = set()
+
+            for index, track in enumerate(top_tracks["items"]):
+                track_id = track["id"]
+                rank = index + 1  # Rank is based on the index (1-based)
+
+                # Save only essential information
+                top_records.append((self.user_id, track_id, rank, time_range, datetime.now().date()))
+                top_track_ids.add(track_id)
+
+            # Step 3: Ensure tracks exist in the tracks table
+            if top_track_ids:
+                await self.update_tracks_details(list(top_track_ids))  # Convert set to list
+
+            # Step 4: Insert new top tracks data
+            if top_records:
+                async with self.db.transaction():  # ✅ Ensure atomic insertion
+                    query = """
+                        INSERT INTO users_top_tracks 
+                        (user_id, track_id, rank, time_range, last_updated) 
+                        VALUES ($1, $2, $3, $4, $5);
+                    """
+                    await self.db.executemany(query, top_records)
+
+            else:
+                print("No top tracks to insert.")
+
+        except Exception as e:
+            print(f"Database insertion error in crud.py top_tracks_to_database: {e}")
+
+        finally:
+            await self.close_db()  # ✅ Close connection properly
+
+
+
+    async def update_tracks_details(self, track_ids):
+        print("Enriching tracks database with new track details...")
+        if not self.db:
+            raise Exception("Database connection not initialized. Call connect_db() first.")
+
+        try:
+            track_updates = []
+            track_artist_relationships = []  # List to store track-artist relationships
+            artists_id_to_add = set()
+            album_ids_to_add = set()
+
+            # Split the track_ids into batches of 50
+            batch_size = 50
+            track_id_batches = [track_ids[i:i + batch_size] for i in range(0, len(track_ids), batch_size)]
+
+            for batch in track_id_batches:
+                try:
+                    # Fetch the details for the current batch of tracks
+                    tracks_details = await get_track(self.token, batch)
+
+                    for track_details in tracks_details.get("tracks", []):
+                        if not track_details:
+                            continue  # Skip if track details are missing
+
+                        track_id = track_details.get("id")
+                        track_name = track_details.get("name", "Unknown")
+                        
+                        # Collect artist IDs and names
+                        artist_ids = [artist.get("id", "Unknown") for artist in track_details.get("artists", [])]
+                        artist_names = [artist.get("name", "Unknown") for artist in track_details.get("artists", [])]
+                        
+                        # Collect album details
+                        album_details = track_details.get("album", {})
+                        album_id = album_details.get("id", "Unknown")
+                        album_name = album_details.get("name", "Unknown")
+                        
+                        # Select highest resolution album image
+                        album_image_url = next((img["url"] for img in album_details.get("images", []) if img["height"] == 640), None)
+                        if not album_image_url and album_details.get("images"):  # Fallback
+                            album_image_url = album_details["images"][0]["url"]
+
+                        release_date_str = album_details.get("release_date", None)
+                        release_date = parse_release_date(release_date_str)
+
+                        duration_ms = track_details.get("duration_ms", 0)
+                        is_explicit = track_details.get("explicit", False)
+                        spotify_url = track_details["external_urls"].get("spotify", "") if track_details.get("external_urls") else ""
+                        popularity = track_details.get("popularity", 0)
+                        track_number = track_details.get("track_number", 0)
+
+                        # Add to artist and album sets
+                        artists_id_to_add.update(artist_ids)
+                        album_ids_to_add.add(album_id)
+
+                        # Prepare track update data
+                        track_updates.append((
+                            track_id, track_name, album_id, artist_ids[0] if artist_ids else None,  
+                            spotify_url, duration_ms, popularity, is_explicit, track_number,
+                            release_date, album_image_url, album_name, artist_names[0] if artist_names else None
+                        ))
+
+                        # Prepare track-artist relationships
+                        for artist_id in artist_ids:
+                            track_artist_relationships.append((track_id, artist_id))
+
+                except Exception as batch_error:
+                    print(f"Error fetching details for batch {batch}: {batch_error}")
+                    continue
+
+            # Process all artists first
+            if artists_id_to_add:
+                await self.update_artist_details(list(artists_id_to_add))
+
+            # Process albums after artists
+            if album_ids_to_add:
+                await self.all_albums_to_database(list(album_ids_to_add))
+
+            # Insert tracks last
+            if track_updates:
+                print("Inserting/updating track details into the database...")
+                insert_or_update_query = """
+                    INSERT INTO tracks (
+                        track_id, name, album_id, artist_id, spotify_url, duration_ms, popularity, 
+                        explicit, track_number, album_release_date, album_image_url, album_name, artist_name
+                    ) 
+                    VALUES 
+                        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ON CONFLICT (track_id) 
+                    DO UPDATE SET
+                        name = COALESCE(EXCLUDED.name, tracks.name),
+                        album_id = COALESCE(EXCLUDED.album_id, tracks.album_id),
+                        artist_id = CASE 
+                            WHEN tracks.artist_id IS NULL THEN EXCLUDED.artist_id
+                            ELSE tracks.artist_id
+                        END,
+                        artist_name = CASE 
+                            WHEN tracks.artist_name IS NULL THEN EXCLUDED.artist_name
+                            ELSE tracks.artist_name
+                        END,
+                        spotify_url = COALESCE(EXCLUDED.spotify_url, tracks.spotify_url),
+                        duration_ms = COALESCE(EXCLUDED.duration_ms, tracks.duration_ms),
+                        popularity = COALESCE(EXCLUDED.popularity, tracks.popularity),
+                        explicit = COALESCE(EXCLUDED.explicit, tracks.explicit),
+                        track_number = COALESCE(EXCLUDED.track_number, tracks.track_number),
+                        album_release_date = COALESCE(EXCLUDED.album_release_date, tracks.album_release_date),
+                        album_image_url = COALESCE(EXCLUDED.album_image_url, tracks.album_image_url),
+                        album_name = COALESCE(EXCLUDED.album_name, tracks.album_name)
+                """
+
+                async with self.db.transaction():
+                    print("Executing batch insert/update for tracks...")
+                    await self.db.executemany(insert_or_update_query, track_updates)
+                    print("Track details inserted/updated successfully.")
+
+            # Insert track-artist relationships
+            if track_artist_relationships:
+                print("Inserting track-artist relationships into the database...")
+                insert_track_artist_query = """
+                    INSERT INTO track_artists (track_id, artist_id)
+                    VALUES ($1, $2)
+                    ON CONFLICT (track_id, artist_id) DO NOTHING
+                """
+
+                async with self.db.transaction():
+                    await self.db.executemany(insert_track_artist_query, track_artist_relationships)
+                    print("Track-artist relationships inserted successfully.")
+
+            else:
+                print("No tracks to enrich for update_tracks_details.")
+
+            # If some artist_names were missing, re-call the update function
+            await retry_update_tracks_if_needed(self.db)
+
+        except Exception as e:
+            print(f"Error enriching tracks database in crud.py for update_tracks_details: {e}")
+
+
+"""
 
 
 
@@ -144,6 +332,8 @@ class SpotifyDataSaver:
 
 
 
+
+#OLD VERSION WITHOUT OOP
 
 async def top_artists_to_database(top_artists, user_id, time_range, current_time, token):
     """Saves top artists rankings into users_top_artists and ensures artist details are inserted first."""
