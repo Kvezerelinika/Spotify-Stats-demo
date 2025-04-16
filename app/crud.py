@@ -26,7 +26,7 @@ class SpotifyDataSaver:
 
 
 
-    async def top_artists_to_database(self, top_artists: str, time_range: str, current_time: str):
+    async def top_artists_to_database(self, top_artists: dict, time_range: str, current_time: datetime):
         "Saves user's top artists to database"
 
         try:
@@ -416,9 +416,12 @@ class SpotifyDataSaver:
                         # Insert into the database
                         await self.db.execute(insert_query, self.user_id, track_id, played_at)
 
-        # If track_ids exist, update track details again (if needed)
-        if track_ids:
-            await self.update_tracks_details(list(track_ids))  # Ensure this function is async
+            # If track_ids exist, update track details again (if needed)
+            if track_ids:
+                await self.update_tracks_details(list(track_ids))  # Ensure this function is async
+
+        except Exception as e:
+            print(f"Database insertion error in recents_to_database: {e}")
 
 
     async def all_albums_to_database(self, album_ids):
