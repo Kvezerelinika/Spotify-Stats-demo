@@ -7,6 +7,76 @@ from app.spotify_api import get_top_artists, get_top_tracks, get_recently_played
 from app.crud import SpotifyDataSaver
 from app.database import get_db_connection
 
+class UserMusicDataService:
+    def __init__(self, user_id: str, db):
+        self.user_id = user_id
+        self.db = db
+
+    async def get_top_tracks(self, time_range: str = "short_term"):
+        query = """
+        SELECT track_name, artist_name, play_count
+        FROM top_tracks
+        WHERE user_id = %s AND time_range = %s
+        ORDER BY play_count DESC
+        LIMIT 10
+        """
+        cursor = await self.db.execute(query, (self.user_id, time_range))
+        result = await cursor.fetchall()
+        return result
+
+    async def get_top_artists(self, time_range: str = "short_term"):
+        query = """
+        SELECT artist_name, play_count
+        FROM top_artists
+        WHERE user_id = %s AND time_range = %s
+        ORDER BY play_count DESC
+        LIMIT 10
+        """
+        cursor = await self.db.execute(query, (self.user_id, time_range))
+        result = await cursor.fetchall()
+        return result
+
+    async def get_top_albums(self, time_range: str = "short_term"):
+        query = """
+        SELECT album_name, artist_name, play_count
+        FROM top_albums
+        WHERE user_id = %s AND time_range = %s
+        ORDER BY play_count DESC
+        LIMIT 10
+        """
+        cursor = await self.db.execute(query, (self.user_id, time_range))
+        result = await cursor.fetchall()
+        return result
+
+    async def get_total_play_count(self):
+        query = """
+        SELECT SUM(play_count) as total
+        FROM top_tracks
+        WHERE user_id = %s
+        """
+        cursor = await self.db.execute(query, (self.user_id,))
+        result = await cursor.fetchone()
+        return result["total"] if result and result["total"] else 0
+
+    async def get_favorite_genres(self):
+        query = """
+        SELECT genre, SUM(play_count) as total
+        FROM top_artists
+        WHERE user_id = %s
+        GROUP BY genre
+        ORDER BY total DESC
+        LIMIT 5
+        """
+        cursor = await self.db.execute(query, (self.user_id,))
+        result = await cursor.fetchall()
+        return result
+
+
+
+
+
+
+"""
 async def get_user_info(user_id, db):
     # Use asyncpg methods instead of cursor
     query = "SELECT * FROM users WHERE user_id = $1"
@@ -366,6 +436,7 @@ async def update_user_music_data(user_id, token, data_type, time_range):
     else:
         logging.info(f"{data_type} data for user {user_id}, time range {time_range} is up-to-date.")
 
+"""
 
 
 

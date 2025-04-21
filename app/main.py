@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database, get_current_user#, SpotifyOAuth, OAuthSettings
 from app.spotify_api import get_spotify_user_profile
 from app.database import get_db_connection
-from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data, complete_listening_history)
+from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data, complete_listening_history, UserMusicDataService)
 
 
 # Function to fetch user data from Spotify
@@ -236,18 +236,20 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
             update_user_music_data(user_id, token, "recent_tracks", time_range)
         )
 
-        user_info = await get_user_info(user_id, db)
-        top_artist_list = await get_top_artists_db(user_id, db, time_range)
-        top_tracks_list = await get_top_tracks_db(user_id, db, time_range)
-        track_play_counts = await get_track_play_counts(user_id, db)
-        daily_play_count = await get_daily_play_counts(user_id, db)
-        total_play_count = await get_total_play_count(user_id, db)
-        total_play_today = await get_total_play_today(user_id, db)
-        total_listened_minutes, total_listened_hours = await get_total_listening_time(user_id, db)
-        top_genres = await get_top_genres(user_id, db)
-        records_by_time = await complete_listening_history(user_id, db, limit, offset)
+        user_service = UserMusicDataService(user_id, db)
 
-        playing_now_data = await get_current_playing(token) or {
+        user_info = await user_service.get_user_info()
+        top_artist_list = await user_service.get_top_artists_db(time_range)
+        top_tracks_list = await user_service.get_top_tracks_db(time_range)
+        track_play_counts = await user_service.get_track_play_counts()
+        daily_play_count = await user_service.get_daily_play_counts()
+        total_play_count = await user_service.get_total_play_count()
+        total_play_today = await user_service.get_total_play_today()
+        total_listened_minutes, total_listened_hours = await user_service.get_total_listening_time()
+        top_genres = await user_service.get_top_genres()
+        records_by_time = await user_service.complete_listening_history(limit, offset)
+
+        playing_now_data = await user_service.get_current_playing(token) or {
             "track_name": "N/A",
             "artist_name": "N/A",
             "album_image_url": "N/A"
