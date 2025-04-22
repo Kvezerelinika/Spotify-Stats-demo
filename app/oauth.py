@@ -2,7 +2,7 @@ import requests, os, time, httpx, json, redis
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from app.database import get_db_connection
-from app.spotify_api import get_spotify_user_profile
+from app.spotify_api import SpotifyClient
 
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import Request, HTTPException, status, FastAPI, Depends
@@ -11,9 +11,7 @@ from fastapi_sessions.session_verifier import SessionVerifier
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from starlette.requests import Request
-#from starlette_session import SessionAutoloadMiddleware
-#from starlette_session.backends.redis import RedisBackend
-#from typing import Optional
+from typing import Optional
 
 
 
@@ -21,18 +19,12 @@ load_dotenv()
 app = FastAPI()
 
 # Production-level secret key
-#SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")  # fallback only for dev
-
-# Redis backend for sessions
-#redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-#backend = RedisBackend(redis_url)
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")  # fallback only for dev
 
 # Middleware stack
-#app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-#app.add_middleware(SessionAutoloadMiddleware, backend=backend)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 
-"""
 class OAuthSettings:
     def __init__(self):
         self.SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
@@ -178,7 +170,7 @@ class SpotifyUser:
 
             if info_users:
                 await db.executemany(
-                    "
+                    """
                     INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
                                        followers, external_urls, href, uri, type, last_updated) 
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
@@ -196,7 +188,7 @@ class SpotifyUser:
                         uri = EXCLUDED.uri, 
                         type = EXCLUDED.type, 
                         last_updated = NOW()
-                    ", 
+                    """, 
                     info_users
                 )
                 return user_profile
@@ -229,20 +221,43 @@ class SpotifyHandler:
         await user.store_user_info_to_database(user_profile, db)
 
         return {"user_profile": user_profile, "access_token": access_token}
+    
+    @staticmethod
+    async def get_current_user(request: Request) -> dict | RedirectResponse | JSONResponse:
+        token = request.session.get("spotify_token")
+        user_id = request.session.get("user_id")
+
+        if not token or not user_id:
+            return RedirectResponse(url="/login")
+
+        # You could inject a custom version of this if needed, for now we use the procedural one
+        user_profile = await SpotifyClient.get_spotify_user_profile(token)
+        if not user_profile:
+            return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
+
+        db = await get_db_connection()
+        user_instance = SpotifyUser(token)
+        user_data = await user_instance.store_user_info_to_database(user_profile, db)
+
+        if user_data:
+            new_user_id = user_data.get("id")
+            if new_user_id and new_user_id != user_id:
+                request.session["user_id"] = new_user_id
+                user_id = new_user_id  # Update for return
+
+        return {"token": token, "user_id": user_id}
+
+
+
+
+
+
+
+
+
+
 
 """
-
-
-
-
-
-
-
-
-
-
-
-
 # OAuth-related settings
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -429,7 +444,7 @@ async def user_info_to_database(user_profile):
 
                 # Insert or update user info in the database
                 await db.executemany(
-                    """
+                    "
                     INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
                                        followers, external_urls, href, uri, type, last_updated) 
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
@@ -447,7 +462,7 @@ async def user_info_to_database(user_profile):
                         uri = EXCLUDED.uri, 
                         type = EXCLUDED.type, 
                         last_updated = NOW()
-                    """, 
+                    ", 
                     info_users
                 )
                 return info_users
@@ -484,3 +499,4 @@ async def get_current_user(request: Request):
             user_id = new_user_id  # Update user_id for further use
 
     return {"token": token, "user_id": user_id}
+"""

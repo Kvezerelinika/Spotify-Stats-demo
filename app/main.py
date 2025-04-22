@@ -9,40 +9,20 @@ from contextlib import asynccontextmanager
 
 
 # Import Spotify helper functions
-from app.oauth import get_spotify_token, get_spotify_login_url, user_info_to_database, get_current_user#, SpotifyOAuth, OAuthSettings
-from app.spotify_api import get_spotify_user_profile
+from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
+from app.spotify_api import SpotifyClient
 from app.database import get_db_connection
-from app.helpers import (get_user_info, get_top_artists_db, get_top_tracks_db, get_track_play_counts, get_daily_play_counts, get_total_play_count, get_total_play_today, get_current_playing, get_total_listening_time, get_daily_listening_time, get_top_genres, update_user_music_data, complete_listening_history, UserMusicDataService)
+from app.helpers import MusicDataService, UserMusicUpdater
 
 
 # Function to fetch user data from Spotify
 import time
 import httpx
 
+settings = OAuthSettings()
+spotify_oauth = SpotifyOAuth(settings)
 
-"""@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # ✅ Startup logic
-    settings = OAuthSettings()
-    token_refresher = SpotifyOAuth(settings)
 
-    # Save for access from other parts of the app if needed
-    app.state.token_refresher = token_refresher
-
-    # Replace with your real refresh token
-    refresh_token = "your_refresh_token"
-
-    app.state.token_task = asyncio.create_task(auto_refresh_token(token_refresher, refresh_token))
-
-    yield
-
-    # ✅ Shutdown logic
-    app.state.token_task.cancel()
-    try:
-        await app.state.token_task
-    except asyncio.CancelledError:
-        pass
-"""
 # Initialize FastAPI only once
 app = FastAPI() #(lifespan=lifespan)
 router = APIRouter()
@@ -77,6 +57,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 async def root(request: Request):
     # Get the Spotify token from the session (None if not logged in)
     token = request.session.get("spotify_token")
+    client_data = SpotifyClient(token)
 
     # Default values in case the user is not logged in
     user_image, user_name = None, "Guest"
@@ -87,8 +68,8 @@ async def root(request: Request):
         cursor = db.cursor()
 
         # Get the user profile from Spotify
-        user_profile = get_spotify_user_profile(token)
-        user_data = user_info_to_database(user_profile)
+        user_profile = await client_data.get_spotify_user_profile()
+        user_data = SpotifyUser.user_info_to_database(user_profile)
         user_id = user_data[0][0]
 
         # Fetch user info from the database (image and name)
@@ -109,7 +90,7 @@ async def root(request: Request):
     })
 
 @app.get("/layout")
-async def layout_page(request: Request, user_data: dict = Depends(get_current_user)):
+async def layout_page(request: Request, user_data: dict = Depends(SpotifyHandler.get_current_user)):
     db = await get_db_connection()  # Get the async connection
 
     user_id = user_data.get("user_id")
@@ -138,7 +119,7 @@ def login_page(request: Request):
 
 @app.get("/login")
 def login(request: Request):
-    return RedirectResponse(get_spotify_login_url(request))
+    return RedirectResponse(spotify_oauth.get_spotify_login_url(request))
 
 @app.get("/logout")
 async def logout(request: Request):
@@ -163,16 +144,17 @@ async def callback(request: Request):
 
     try:
         # Step 2: Exchange the authorization code for an access token
-        token_response = await get_spotify_token(code, state, request)
+        token_response = await spotify_oauth.get_spotify_token(code, state, request)
 
         if "access_token" in token_response:
             access_token = token_response["access_token"]
+            client_data = SpotifyClient(token)
 
             # Store the access token in session
             request.session["spotify_token"] = access_token
 
             # Step 3: Fetch user data from Spotify
-            user_info = await get_spotify_user_profile(access_token)
+            user_info = await client_data.get_spotify_user_profile()
 
             # Step 4: Extract user_id from user info and store it in session
             user_id = user_info.get("id")
@@ -219,7 +201,7 @@ async def get_spotify_user_profile(token):
 
 
 @app.get("/dashboard")
-async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_data: dict = Depends(get_current_user)):
+async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_data: dict = Depends(SpotifyHandler.get_current_user)):
     db = None
     try:
 
@@ -230,13 +212,15 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         db = await get_db_connection()
         time_range = request.query_params.get('time_range', 'medium_term')
 
+        updater = UserMusicUpdater(db, user_id, token)
+
         await asyncio.gather(
-            update_user_music_data(user_id, token, "top_artists", time_range),
-            update_user_music_data(user_id, token, "top_tracks", time_range),
-            update_user_music_data(user_id, token, "recent_tracks", time_range)
+            updater.update_data_if_needed(user_id, token, "top_artists", time_range),
+            updater.update_data_if_needed(user_id, token, "top_tracks", time_range),
+            updater.update_data_if_needed(user_id, token, "recent_tracks", time_range)
         )
 
-        user_service = UserMusicDataService(user_id, db)
+        user_service = MusicDataService(user_id, db)
 
         user_info = await user_service.get_user_info()
         top_artist_list = await user_service.get_top_artists_db(time_range)
@@ -249,9 +233,10 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         top_genres = await user_service.get_top_genres()
         records_by_time = await user_service.complete_listening_history(limit, offset)
 
-        playing_now_data = await user_service.get_current_playing(token) or {
+        spotify_client = SpotifyClient(token)
+        playing_now_data = await spotify_client.get_now_playing() or {
             "track_name": "N/A",
-            "artist_name": "N/A",
+            "artists": "N/A",
             "album_image_url": "N/A"
         }
 
@@ -297,14 +282,14 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 @app.get("/get-more-history")
-async def get_more_history(page: int = 1, db=Depends(get_db_connection), user_data: dict = Depends(get_current_user)):
+async def get_more_history(page: int = 1, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
 
     user_id = user_data["user_id"]  # Extract user_id if needed
 
     limit = 20
     offset = (page - 1) * limit
 
-    grouped = await complete_listening_history(user_id, db, limit, offset)
+    grouped = await MusicDataService.complete_listening_history(user_id, db, limit, offset)
     print(f"Fetched page {page} with {len(grouped)} records.")
     return JSONResponse(content=grouped)
 
@@ -312,12 +297,12 @@ async def get_more_history(page: int = 1, db=Depends(get_db_connection), user_da
 
 
 @app.get("/listening-history", response_class=HTMLResponse)
-async def show_listening_history(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(get_current_user)):
+async def show_listening_history(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
     user_id = user_data["user_id"]
     limit = 20
     offset = 0
 
-    grouped_history = await complete_listening_history(user_id, db, limit, offset)
+    grouped_history = await MusicDataService.complete_listening_history(user_id, db, limit, offset)
 
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
@@ -365,8 +350,9 @@ async def upload_page(request: Request):
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     token = request.session.get("spotify_token")
-    user_profile = get_spotify_user_profile(token)
-    user_data = user_info_to_database(user_profile)
+    client_data = SpotifyClient(token)
+    user_profile = await client_data.get_spotify_user_profile()
+    user_data = SpotifyUser.user_info_to_database(user_profile)
     user_id = user_data[0][0] 
 
     # recent tracks artist and image_url update
