@@ -11,6 +11,8 @@ DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 DB_HOST = os.getenv("POSTGRES_HOST", "127.0.0.1")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 
+
+
 # Build the DATABASE URL in SQLAlchemy async format
 DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 

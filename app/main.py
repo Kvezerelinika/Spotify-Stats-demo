@@ -148,7 +148,7 @@ async def callback(request: Request):
 
         if "access_token" in token_response:
             access_token = token_response["access_token"]
-            client_data = SpotifyClient(token)
+            client_data = SpotifyClient(access_token)
 
             # Store the access token in session
             request.session["spotify_token"] = access_token
@@ -215,9 +215,9 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         updater = UserMusicUpdater(db, user_id, token)
 
         await asyncio.gather(
-            updater.update_data_if_needed(user_id, token, "top_artists", time_range),
-            updater.update_data_if_needed(user_id, token, "top_tracks", time_range),
-            updater.update_data_if_needed(user_id, token, "recent_tracks", time_range)
+            updater.update_data_if_needed("top_artists", time_range),
+            updater.update_data_if_needed("top_tracks", time_range),
+            updater.update_data_if_needed("recent_tracks", time_range)
         )
 
         user_service = MusicDataService(user_id, db)

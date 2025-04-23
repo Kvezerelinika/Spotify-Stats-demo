@@ -2,13 +2,13 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from collections import Counter
+from sqlalchemy import text
 
 from app.spotify_api import SpotifyClient
 from app.crud import SpotifyDataSaver
 from app.database import get_db_connection
 
-import pytz
-import logging
+import pytz, logging
 
 class MusicDataService:
     def __init__(self, user_id, db):
@@ -16,106 +16,136 @@ class MusicDataService:
         self.db = db
 
     async def get_user_info(self):
-        query = "SELECT * FROM users WHERE user_id = $1"
-        return await self.db.fetchrow(query, self.user_id)
+        try:
+            query = text("SELECT * FROM users WHERE user_id = :user_id")
+            result = await self.db.execute(query, {"user_id": self.user_id})
+            row = result.fetchone()
+            return dict(row) if row else None
+        except Exception as e:
+            logging.error(f"[DB] Error fetching user info for user_id={self.user_id}: {e}")
+            return None
 
     async def get_top_artists_db(self, time_range):
-        query = """
+        query = text("""
             SELECT a.name, a.image_url, a.spotify_url, uta.rank
             FROM users_top_artists uta
             JOIN artists a ON uta.artist_id = a.artist_id
-            WHERE uta.user_id = $1 AND uta.time_range = $2
+            WHERE uta.user_id = :user_id AND uta.time_range = :time_range
             ORDER BY uta.rank ASC;
-        """
-        return await self.db.fetch(query, self.user_id, time_range)
+        """)
+        result = await self.db.execute(query, {
+            "user_id": self.user_id,
+            "time_range": time_range
+        })
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
 
     async def get_top_tracks_db(self, time_range):
-        query = """
+        query = text ("""
             SELECT t.name, a.name AS artist_name, t.album_image_url, t.spotify_url, utt.rank
             FROM users_top_tracks utt
             JOIN tracks t ON utt.track_id = t.track_id
             JOIN artists a ON t.artist_id = a.artist_id
-            WHERE utt.user_id = $1 AND utt.time_range = $2
+            WHERE utt.user_id = :user_id AND utt.time_range = :time_range
             ORDER BY utt.rank ASC;
-        """
-        return await self.db.fetch(query, self.user_id, time_range)
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id, "time_range": time_range})
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
 
     async def get_track_play_counts(self):
-        query = """
+        query = text("""
             SELECT t.name, t.artist_name, t.album_image_url, COUNT(*) AS track_play_counts
             FROM listening_history lh 
             JOIN tracks t ON lh.track_id = t.track_id
-            WHERE lh.user_id = $1 
+            WHERE lh.user_id = :user_id
             GROUP BY t.name, t.artist_name, t.album_image_url 
             ORDER BY track_play_counts DESC 
             LIMIT 10;
-        """
-        return await self.db.fetch(query, self.user_id)
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
 
     async def get_daily_play_counts(self):
-        query = """
+        query = text("""
             SELECT DATE(lh.played_at) AS play_date, COUNT(*) AS daily_play_count
             FROM listening_history lh
-            WHERE lh.user_id = $1
+            WHERE lh.user_id = :user_id
             GROUP BY play_date
             ORDER BY play_date DESC;
-        """
-        return await self.db.fetch(query, self.user_id)
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
 
     async def get_total_play_today(self):
         today = datetime.today().date()
-        query = "SELECT COUNT(*) FROM listening_history WHERE user_id = $1 AND DATE(played_at) = $2;"
-        return await self.db.fetchval(query, self.user_id, today) or 0
+        query = text("""SELECT COUNT(*) FROM listening_history WHERE user_id = :user_id AND DATE(played_at) = :today;""")
+        result = await self.db.execute(query, {"user_id": self.user_id, "today": today})
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
 
     async def get_total_play_count(self):
-        query = "SELECT COUNT(*) FROM listening_history WHERE user_id = $1;"
-        return await self.db.fetchval(query, self.user_id) or 0
+        query = text("""SELECT COUNT(*) FROM listening_history WHERE user_id = :user_id;""")
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.fetchall()
+        return [dict(row._mapping) for row in rows]
 
     async def get_total_listening_time(self):
-        query = """
+        query = text("""
             SELECT SUM(t.duration_ms)
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
-            WHERE lh.user_id = $1 AND t.duration_ms IS NOT NULL;
-        """
-        total_ms = await self.db.fetchval(query, self.user_id) or 0
+            WHERE lh.user_id = :user_id AND t.duration_ms IS NOT NULL;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        total_ms = result.scalar() or 0
         return total_ms // 60000, total_ms // 3600000
 
     async def get_total_listening_time_today(self):
         today = datetime.today().date()
-        query = """
+        query = text("""
             SELECT SUM(t.duration_ms)
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
-            WHERE lh.user_id = $1 AND DATE(lh.played_at) = $2 AND t.duration_ms IS NOT NULL;
-        """
-        total_ms = await self.db.fetchval(query, self.user_id, today) or 0
+            WHERE lh.user_id = :user_id AND DATE(lh.played_at) = :today AND t.duration_ms IS NOT NULL;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id, "today": today})
+        total_ms = result.scalar() or 0
         return total_ms // 60000, total_ms // 3600000
 
     async def get_daily_listening_time(self):
-        query = """
+        query = text("""
             SELECT DATE(lh.played_at) AS play_date,
-                   SUM(t.duration_ms) / 60000 AS total_minutes,
-                   SUM(t.duration_ms) / 3600000 AS total_hours
+                SUM(t.duration_ms) / 60000 AS total_minutes,
+                SUM(t.duration_ms) / 3600000 AS total_hours
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
-            WHERE lh.user_id = $1 AND t.duration_ms IS NOT NULL
+            WHERE lh.user_id = :user_id AND t.duration_ms IS NOT NULL
             GROUP BY play_date
             ORDER BY play_date DESC;
-        """
-        return await self.db.fetch(query, self.user_id)
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.all()
+        return [{"play_date": row[0], "total_minutes": row[1], "total_hours": row[2]} for row in rows]
 
     async def complete_listening_history(self, limit, offset):
-        query = """
+        query = text("""
             SELECT lh.played_at, t.name, t.artist_name, t.duration_ms
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
-            WHERE lh.user_id = $1 
+            WHERE lh.user_id = :user_id
             ORDER BY lh.played_at DESC 
-            LIMIT $2 OFFSET $3;
-        """
-        records = await self.db.fetch(query, self.user_id, limit, offset)
-        return self.group_by_time_period([dict(row) for row in records])
+            LIMIT :limit OFFSET :offset;
+        """)
+        result = await self.db.execute(query, {
+            "user_id": self.user_id,
+            "limit": limit,
+            "offset": offset
+        })
+        rows = result.mappings().all()
+        return self.group_by_time_period(rows)
 
     def group_by_time_period(self, records):
         now = datetime.now()
@@ -153,18 +183,21 @@ class MusicDataService:
         return time_groups
 
     async def get_top_genres(self):
-        query = """
+        query = text("""
             SELECT a.genres
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
             JOIN artists a ON t.artist_id = a.artist_id
-            WHERE lh.user_id = $1;
-        """
-        artist_genres = await self.db.fetch(query, self.user_id)
+            WHERE lh.user_id = :user_id;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.mappings().all()
+
         genres_count = Counter()
-        for row in artist_genres:
-            genres = row["genres"] if row["genres"] else []
+        for row in rows:
+            genres = row["genres"] or []
             genres_count.update(genres)
+
         return genres_count.most_common(5)
 
 
@@ -179,40 +212,44 @@ class UserMusicUpdater:
         result = None
         try:
             if data_type == "top_tracks":
-                result = await self.db.fetchrow(
-                    """
+                query = text("""
                     SELECT last_updated
                     FROM users_top_tracks
-                    WHERE user_id = $1 AND time_range = $2;
-                    """,
-                    self.user_id, time_range
-                )
+                    WHERE user_id = :user_id AND time_range = :time_range;
+                """)
+                row = await self.db.execute(query, {
+                    "user_id": self.user_id,
+                    "time_range": time_range
+                })
+                result = row.scalar()
 
             elif data_type == "top_artists":
-                result = await self.db.fetchrow(
-                    """
+                query = text("""
                     SELECT last_updated 
                     FROM users_top_artists 
-                    WHERE user_id = $1 AND time_range = $2;
-                    """,
-                    self.user_id, time_range
-                )
+                    WHERE user_id = :user_id AND time_range = :time_range;
+                """)
+                row = await self.db.execute(query, {
+                    "user_id": self.user_id,
+                    "time_range": time_range
+                })
+                result = row.scalar()
 
             elif data_type == "recent_tracks":
-                result = await self.db.fetchrow(
-                    """
+                query = text("""
                     SELECT MAX(played_at) as last_updated
                     FROM listening_history 
-                    WHERE user_id = $1;
-                    """,
-                    self.user_id
-                )
-
-            return result["last_updated"] if result else None
+                    WHERE user_id = :user_id;
+                """)
+                row = await self.db.execute(query, {
+                    "user_id": self.user_id
+                })
+                result = row.scalar()
 
         except Exception as e:
             logging.error(f"[DB] Error fetching last update for user={self.user_id}, type={data_type}, range={time_range}: {e}")
-            return None
+        
+        return result
 
     async def update_data_if_needed(self, data_type, time_range):
         last_update = await self.get_last_update(data_type, time_range)
@@ -237,16 +274,17 @@ class UserMusicUpdater:
             logging.info(f"Fetching new {data_type} data for user {self.user_id}...")
 
             async with SpotifyDataSaver(self.token, self.user_id) as saver:
+                client = SpotifyClient(self.token)
                 if data_type == "top_artists":
-                    data = await SpotifyClient.get_top_artists(self.token, time_range)
+                    data = await client.get_top_artists(time_range)
                     await saver.top_artists_to_database(data, time_range, current_time)
 
                 elif data_type == "top_tracks":
-                    data = await SpotifyClient.get_top_tracks(self.token, time_range)
+                    data = await client.get_top_tracks(time_range)
                     await saver.top_tracks_to_database(data, time_range)
 
                 elif data_type == "recent_tracks":
-                    data = await SpotifyClient.get_recently_played_tracks(self.token)
+                    data = await client.get_recently_played_tracks()
                     await saver.recents_to_database(data)
 
         else:

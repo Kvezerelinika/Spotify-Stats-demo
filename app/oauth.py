@@ -12,7 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from starlette.requests import Request
 from typing import Optional
-
+from sqlalchemy import text
 
 
 load_dotenv()
@@ -146,7 +146,6 @@ class SpotifyUser:
         return user_response.json()
 
     async def store_user_info_to_database(self, user_profile: dict, db) -> Optional[dict]:
-        info_users = []
         if isinstance(user_profile, dict):
             # Extract user profile details
             user_id = user_profile.get("id")
@@ -163,38 +162,48 @@ class SpotifyUser:
             uri = user_profile.get("uri")
             user_type = user_profile.get("type")
 
-            info_users.append(
-                (user_id, display_name, profile_url, image_url, username, email, country, product, 
-                 followers, external_urls, href, uri, user_type)
-            )
+            query = text("""
+                INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
+                                followers, external_urls, href, uri, type, last_updated) 
+                VALUES (:user_id, :display_name, :profile_url, :image_url, :username, :email, :country, :product, 
+                        :followers, :external_urls, :href, :uri, :type, NOW())  
+                ON CONFLICT (user_id) DO UPDATE 
+                SET display_name = EXCLUDED.display_name, 
+                    profile_url = EXCLUDED.profile_url,
+                    image_url = EXCLUDED.image_url,
+                    username = EXCLUDED.username, 
+                    email = EXCLUDED.email, 
+                    country = EXCLUDED.country, 
+                    product = EXCLUDED.product, 
+                    followers = EXCLUDED.followers, 
+                    external_urls = EXCLUDED.external_urls, 
+                    href = EXCLUDED.href, 
+                    uri = EXCLUDED.uri, 
+                    type = EXCLUDED.type, 
+                    last_updated = NOW()
+            """)
 
-            if info_users:
-                await db.executemany(
-                    """
-                    INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
-                                       followers, external_urls, href, uri, type, last_updated) 
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())  
-                    ON CONFLICT (user_id) DO UPDATE 
-                    SET display_name = EXCLUDED.display_name, 
-                        profile_url = EXCLUDED.profile_url,
-                        image_url = EXCLUDED.image_url,
-                        username = EXCLUDED.username, 
-                        email = EXCLUDED.email, 
-                        country = EXCLUDED.country, 
-                        product = EXCLUDED.product, 
-                        followers = EXCLUDED.followers, 
-                        external_urls = EXCLUDED.external_urls, 
-                        href = EXCLUDED.href, 
-                        uri = EXCLUDED.uri, 
-                        type = EXCLUDED.type, 
-                        last_updated = NOW()
-                    """, 
-                    info_users
-                )
-                return user_profile
-            else:
-                print("No user data to insert.")
-                return None
+            await db.execute(query, {
+                "user_id": user_id,
+                "display_name": display_name,
+                "profile_url": profile_url,
+                "image_url": image_url,
+                "username": username,
+                "email": email,
+                "country": country,
+                "product": product,
+                "followers": followers,
+                "external_urls": external_urls,
+                "href": href,
+                "uri": uri,
+                "type": user_type
+            })
+
+            await db.commit()
+            return user_profile
+        else:
+            print("No user data to insert.")
+            return None
 
 
 class SpotifyHandler:
@@ -229,9 +238,10 @@ class SpotifyHandler:
 
         if not token or not user_id:
             return RedirectResponse(url="/login")
+        client = SpotifyClient(token)
 
         # You could inject a custom version of this if needed, for now we use the procedural one
-        user_profile = await SpotifyClient.get_spotify_user_profile(token)
+        user_profile = await client.get_spotify_user_profile()
         if not user_profile:
             return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
 
