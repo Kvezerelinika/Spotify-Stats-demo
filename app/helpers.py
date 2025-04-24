@@ -125,7 +125,7 @@ class MusicDataService:
         """)
         result = await self.db.execute(query, {"user_id": self.user_id})
         rows = result.all()
-        return [{"play_date": row[0], "total_minutes": row[1], "total_hours": row[2]} for row in rows]
+        return [{"play_date": row[0], "total_minutes": row[1]} for row in rows]
 
     async def complete_listening_history(self, limit, offset):
         query = text("""

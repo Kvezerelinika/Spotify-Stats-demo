@@ -13,6 +13,8 @@ from starlette.responses import JSONResponse
 from starlette.requests import Request
 from typing import Optional
 from sqlalchemy import text
+from datetime import datetime, timedelta, timezone
+
 
 
 load_dotenv()
@@ -133,8 +135,10 @@ class SpotifyOAuth:
 
 
 class SpotifyUser:
-    def __init__(self, access_token: str):
+    def __init__(self, access_token: str, refresh_token: Optional[str] = None):
         self.access_token = access_token
+        self.refresh_token = refresh_token
+        self.expires_in = 3600  # Default expiration time in seconds
 
     def get_user_profile(self) -> dict:
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -162,11 +166,14 @@ class SpotifyUser:
             uri = user_profile.get("uri")
             user_type = user_profile.get("type")
 
+            # Compute token expiry timestamp
+            token_expires = datetime.now(timezone.utc) + timedelta(seconds=self.expires_in)
+
             query = text("""
                 INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
-                                followers, external_urls, href, uri, type, last_updated) 
+                                followers, external_urls, href, uri, type, last_updated, access_token, refresh_token, token_expires) 
                 VALUES (:user_id, :display_name, :profile_url, :image_url, :username, :email, :country, :product, 
-                        :followers, :external_urls, :href, :uri, :type, NOW())  
+                        :followers, :external_urls, :href, :uri, :type, NOW(), :access_token, :refresh_token, :token_expires)  
                 ON CONFLICT (user_id) DO UPDATE 
                 SET display_name = EXCLUDED.display_name, 
                     profile_url = EXCLUDED.profile_url,
@@ -180,7 +187,10 @@ class SpotifyUser:
                     href = EXCLUDED.href, 
                     uri = EXCLUDED.uri, 
                     type = EXCLUDED.type, 
-                    last_updated = NOW()
+                    last_updated = NOW(),
+                    access_token = EXCLUDED.access_token,
+                    refresh_token = EXCLUDED.refresh_token,
+                    token_expires = EXCLUDED.token_expires
             """)
 
             await db.execute(query, {
@@ -196,7 +206,10 @@ class SpotifyUser:
                 "external_urls": external_urls,
                 "href": href,
                 "uri": uri,
-                "type": user_type
+                "type": user_type,
+                "access_token": self.access_token,
+                "refresh_token": self.refresh_token,
+                "token_expires": token_expires
             })
 
             await db.commit()
@@ -221,8 +234,9 @@ class SpotifyHandler:
         token_info = await self.spotify_oauth.get_spotify_token(code, state, request)
         
         access_token = token_info.get("access_token")
+        refresh_token = token_info.get("refresh_token")
         
-        user = SpotifyUser(access_token)
+        user = SpotifyUser(access_token, refresh_token)
         user_profile = user.get_user_profile()
 
         # Store user information in the database
