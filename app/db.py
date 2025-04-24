@@ -55,6 +55,8 @@ class Track(Base):
     track_id = Column(String, primary_key=True)  # track_id is the primary key
     name = Column(String, nullable=False)  # Track name (cannot be null)
     album_id = Column(String, ForeignKey("albums.album_id"), nullable=True)  # Foreign key to album
+    artist_id = Column(String, ForeignKey("artists.artist_id"), nullable=True)  # ✅ add this
+    artist_name = Column(String, nullable=True)  # ✅ add this
     spotify_url = Column(String, nullable=True)  # URL to the track on Spotify
     duration_ms = Column(Integer, nullable=True)  # Duration of the track in milliseconds
     popularity = Column(Integer, nullable=True)  # Popularity score of the track
@@ -70,6 +72,7 @@ class Track(Base):
     listening_history = relationship("ListeningHistory", back_populates="tracks")  # Relationship with ListeningHistory
     users_top_tracks = relationship("UsersTopTracks", back_populates="tracks")  # Relationship with UsersTopTracks
     track_artists = relationship("TrackArtist", back_populates="tracks")  # Relationship with TrackArtist (many-to-many with Artist)
+    primary_artist = relationship("Artist", foreign_keys=[artist_id]) # Relationship with primary artist (if needed, otherwise can be removed)
 
 
 
@@ -89,6 +92,7 @@ class Artist(Base):
     albums = relationship("Album", back_populates="artists")     # Relationship with Albums
     track_artists = relationship("TrackArtist", back_populates="artists")     # Relationship with track_artists (many-to-many with Track)
     users_top_artists = relationship("UsersTopArtists", back_populates="artists")     # Relationship with users_top_artists (many-to-many with User)
+    tracks = relationship("Track", back_populates="primary_artist", foreign_keys="[Track.artist_id]") # Relationship with Tracks (if needed, otherwise can be removed)
 
 
 class Album(Base):

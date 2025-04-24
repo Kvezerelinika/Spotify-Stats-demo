@@ -187,10 +187,10 @@
                             <div class="artist-list">
                                 {% for artist in top_artist_list %}
                                     <div class="artist-item">
-                                        <img src="{{ artist[1] }}" alt="{{ artist[0] }}">
-                                        <span class="rank_2">{{ loop.index }}</span>
+                                        <img src="{{ artist.image_url }}" alt="{{ artist.name }}">
+                                        <span class="rank_2">{{ artist.rank }}</span>
 
-                                        <a href="{{ artist[2] }}" target="_blank" class="artist-name">{{ artist[0] }}</a>
+                                        <a href="{{ artist.spotify_url }}" target="_blank" class="artist-name">{{ artist.name }}</a>
                                     </div>
                                 {% endfor %}
                             </div>
@@ -207,12 +207,12 @@
                         <div class="card-body">
                             <h2>Your Top Tracks</h2>
                             <div class="artist-list">
-                                {% for track_name, artist_name, album_image_url, spotify_url, rank in top_tracks_list %}
+                                {% for tracks in top_tracks_list %}
                                     <div class="artist-item">
-                                        <img src="{{ album_image_url }}" alt="Album cover for {{ track_name }} by {{ artist_name }}">
-                                        <span class="rank_2">{{ rank }}</span>
+                                        <img src="{{ tracks.album_image_url }}" alt="Album cover for {{ tracks.name }} by {{ tracks.artist_name }}">
+                                        <span class="rank_2">{{ tracks.rank }}</span>
 
-                                        <a href="{{ spotify_url }}" target="_blank" class="artist-name">{{ track_name }} by {{ artist_name }}</a>
+                                        <a href="{{ tracks.spotify_url }}" target="_blank" class="artist-name">{{ tracks.name }} by {{ tracks.artist_name }}</a>
                                     </div>
                                 {% endfor %}
                             </div>
@@ -345,14 +345,14 @@
         <div class="track-item">
             <span class="rank">{{ loop.index }}</span> <!-- Rank number -->
             <div class="track-info">
-                <img src="{{ track[2] }}" alt="{{ track[0] }}">
+                <img src="{{ track.album_image_url }}" alt="{{ track.name }}">
                 <div class="track-details">
-                    <strong>{{ track[0] }} by {{ track[1] }}</strong>
+                    <strong>{{ track.name }} by {{ track.artist_name }}</strong>
                 </div>
             </div>
             <div class="play-count">
                 <span class="times">Played</span>
-                <span class="count">{{ track[3] }}</span>
+                <span class="count">{{ track.track_play_counts }}</span>
                 <span class="times">times</span>
             </div>
         </div>
@@ -363,8 +363,8 @@
     <h2>Total Plays Per Day</h2>
         {% if daily_play_count %}
             <ul>
-            {% for play_date, daily_play_count in daily_play_count %}
-                <li>{{ play_date }}: {{ daily_play_count }} listens</li>
+            {% for date_count in daily_play_count %}
+                <li>{{ date_count.play_date }}: {{ date_count.daily_play_count }} listens</li>
             {% endfor %}
             </ul>
         {% else %}
@@ -411,8 +411,8 @@
         <h2>TOP TRACKS</h2>
         {% if top_tracks_list %}
             <ul>
-                {% for track_name, artist_name, popularity, album_image_url, spotify_url in top_tracks_list %}
-                    <li>{{ track_name }} by {{ artist_name }} ({{ popularity }})</li>
+                {% for tracks in top_tracks_list %}
+                    <li>{{ tracks.name }} by {{ tracks.artist_name }} ({{ tracks.rank }})</li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -439,9 +439,9 @@
         {% if daily_listening_time %}
             <ul>
                 {% for day in daily_listening_time %}
-                    {% set hours = day[1] // 60 %}
-                    {% set minutes = day[1] % 60 %}
-                    <li>{{ day[0] }}: {{ day[1] }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
+                    {% set hours = day.total_minutes // 60 %}
+                    {% set minutes = day.total_minutes % 60 %}
+                    <li>{{ day.play_date }}: {{ day.total_minutes }} minutes ({{ hours }} hours {{ minutes }} minutes)</li>
                 {% endfor %}
             </ul>
         {% else %}

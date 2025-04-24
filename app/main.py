@@ -229,6 +229,7 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         daily_play_count = await user_service.get_daily_play_counts()
         total_play_count = await user_service.get_total_play_count()
         total_play_today = await user_service.get_total_play_today()
+        daily_listening_time = await user_service.get_daily_listening_time()
         total_listened_minutes, total_listened_hours = await user_service.get_total_listening_time()
         top_genres = await user_service.get_top_genres()
         records_by_time = await user_service.complete_listening_history(limit, offset)
@@ -258,14 +259,15 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         "daily_play_count": daily_play_count,
         "total_play_count": total_play_count,
         "total_play_today": total_play_today,
+        "daily_listening_time": daily_listening_time,
         "total_listened_minutes": total_listened_minutes,
         "total_listened_hours": total_listened_hours,
         "top_genres": top_genres,
         "records_by_time": records_by_time,
         "playing_now_data": playing_now_data,
         "current_time_range": time_range,
-        "user_image": user_info[3] if user_info else None,
-        "user_name": user_info[1] if user_info else "Unknown User",
+        "user_image": user_info.get("image_url") if user_info else None,
+        "user_name": user_info.get("display_name") if user_info else "Unknown User",
         "track_name": playing_now_data.get("track_name"),
         "artist_name": playing_now_data.get("artists"),
         "album_img": playing_now_data.get("album_image_url")

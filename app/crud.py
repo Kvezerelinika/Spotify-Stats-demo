@@ -4,7 +4,8 @@ import json, time
 from datetime import datetime, timedelta
 from sqlalchemy import text
 
-from sqlalchemy import insert, delete, select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql import text
 from app.db import UsersTopArtists, Artist, UsersTopTracks, Track, Album, TrackArtist
 
@@ -89,7 +90,8 @@ class SpotifyDataSaver:
                 batch = artist_ids[i:i+50]
 
                 try:
-                    data = await SpotifyClient.get_all_artists(self.token, batch)
+                    client = SpotifyClient(self.token)
+                    data = await client.get_all_artists(batch)
                     artists_list = data.get("artists", [])
                 except Exception as e:
                     print(f"Failed to fetch artist batch: {e}")
@@ -202,7 +204,7 @@ class SpotifyDataSaver:
 
 
 
-    async def update_tracks_details(self, track_ids: list[str], token: str):
+    async def update_tracks_details(self, track_ids: list[str]):
         print("Enriching tracks database with new track details...")
 
         if not self.db:
@@ -219,7 +221,8 @@ class SpotifyDataSaver:
 
             for batch in track_id_batches:
                 try:
-                    tracks_details = await SpotifyClient.get_track(self.token, batch)
+                    client = SpotifyClient(self.token)
+                    tracks_details = await client.get_track(batch)
 
                     for track in tracks_details.get("tracks", []):
                         if not track:
@@ -282,34 +285,37 @@ class SpotifyDataSaver:
 
             if track_updates:
                 print("Inserting/updating track details into the database...")
-                for data in track_updates:
-                    stmt = insert(Track).values(**data).on_conflict_do_update(
-                        index_elements=['track_id'],
-                        set_={
-                            "name": data["name"],
-                            "album_id": data["album_id"],
-                            "artist_id": data["artist_id"],
-                            "artist_name": data["artist_name"],
-                            "spotify_url": data["spotify_url"],
-                            "duration_ms": data["duration_ms"],
-                            "popularity": data["popularity"],
-                            "explicit": data["explicit"],
-                            "track_number": data["track_number"],
-                            "album_release_date": data["album_release_date"],
-                            "album_image_url": data["album_image_url"],
-                            "album_name": data["album_name"]
-                        }
-                    )
-                    await self.db.execute(stmt)
+                async with self.db.begin():
+                    for data in track_updates:
+                        stmt = insert(Track).values(**data)
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=['track_id'],
+                            set_={
+                                "name": data["name"],
+                                "album_id": data["album_id"],
+                                "artist_id": data["artist_id"],
+                                "artist_name": data["artist_name"],
+                                "spotify_url": data["spotify_url"],
+                                "duration_ms": data["duration_ms"],
+                                "popularity": data["popularity"],
+                                "explicit": data["explicit"],
+                                "track_number": data["track_number"],
+                                "album_release_date": data["album_release_date"],
+                                "album_image_url": data["album_image_url"],
+                                "album_name": data["album_name"]
+                            }
+                        )
+                        await self.db.execute(stmt)
 
-                print("Track details inserted/updated successfully.")
+                    print("Track details inserted/updated successfully.")
 
             if track_artist_relationships:
                 print("Inserting track-artist relationships into the database...")
 
                 async with self.db.begin():
                     for rel in track_artist_relationships:
-                        stmt = insert(TrackArtist).values(**rel).on_conflict_do_nothing()
+                        stmt = insert(TrackArtist).values(**rel)
+                        stmt = stmt.on_conflict_do_nothing()
                         await self.db.execute(stmt)
 
                 print("Track-artist relationships inserted successfully.")
@@ -334,10 +340,10 @@ class SpotifyDataSaver:
         if rows:
             missing_track_ids = [row['track_id'] for row in rows]
             print(f"Retrying update for tracks with missing artist names: {missing_track_ids}")
-            await self.update_tracks_details(missing_track_ids, self.token)
+            await self.update_tracks_details(missing_track_ids)
 
 
-    def parse_release_date(release_date_str):
+    def parse_release_date(self, release_date_str):
         """Parses Spotify's release date format correctly, even if it's only a year or year-month format."""
         if not release_date_str:
             return None  # Handle missing values gracefully
@@ -379,11 +385,10 @@ class SpotifyDataSaver:
         # ✅ STEP 1: Ensure track details are in DB (run outside transaction!)
         if track_ids:
             print("FROM RECENT TO TRACKS UPDATE IDS: ", track_ids)
-            await self.update_tracks_details(list(track_ids), self.token)
+            await self.update_tracks_details(list(track_ids))
+            await self.db.commit()
 
         try:
-
-
             # ✅ STEP 2: Insert into listening_history (new transaction)
             insert_query = text("""
                 INSERT INTO listening_history (user_id, track_id, played_at)
@@ -419,60 +424,67 @@ class SpotifyDataSaver:
 
 
     async def all_albums_to_database(self, album_ids):
-        print("Inserting album details into the database...")        
+        print("Fetching album details from Spotify...")
+        tot_albums = []
+        new_artists = set()
+
+        # Fetch all albums and artist IDs first
+        album_chunks = [album_ids[i:i + 20] for i in range(0, len(album_ids), 20)]
+
+        for chunk in album_chunks:
+            client = SpotifyClient(self.token)
+            album_details_response = await client.get_all_albums(chunk)
+
+            if "albums" not in album_details_response:
+                print(f"Unexpected response format: {album_details_response}")
+                continue
+
+            for album_details in album_details_response["albums"]:
+                album_id = album_details.get("id")
+                name = album_details.get("name")
+                artist_id = album_details["artists"][0]["id"] if album_details.get("artists") else None
+                image_url = album_details["images"][0]["url"] if album_details.get("images") else None
+                spotify_url = album_details.get("external_urls", {}).get("spotify")
+
+                if not album_id or not name or not artist_id:
+                    print(f"Missing required album data for album {album_id}")
+                    continue
+
+                new_artists.add(artist_id)
+                tot_albums.append((album_id, name, artist_id, image_url, spotify_url))
+
+        # Fetch artist details first (API call)
+        if new_artists:
+            artist_chunks = [list(new_artists)[i:i + 50] for i in range(0, len(new_artists), 50)]
+            for artist_chunk in artist_chunks:
+                await self.update_artist_details(artist_chunk)
+
+        print("Inserting into database...")
+
+        # Now begin DB transaction
         try:
             async with self.db.begin():
-                tot_albums = []
-                new_artists = set()
-
-                # Split album_ids into chunks of 20 (Spotify API limit)
-                album_chunks = [album_ids[i:i + 20] for i in range(0, len(album_ids), 20)]
-
-                for chunk in album_chunks:
-                    # Fetch album details for the batch
-                    album_details_response = await SpotifyClient.get_all_albums(self.token, chunk)
-                    
-                    if "albums" not in album_details_response:
-                        print(f"Unexpected response format: {album_details_response}")
-                        continue
-
-                    for album_details in album_details_response["albums"]:
-                        # Extract necessary details with safety checks
-                        album_id = album_details.get("id")
-                        name = album_details.get("name")
-                        artist_id = album_details["artists"][0]["id"] if album_details.get("artists") else None
-                        image_url = album_details["images"][0]["url"] if album_details.get("images") else None
-                        spotify_url = album_details.get("external_urls", {}).get("spotify")
-
-                        if not album_id or not name or not artist_id:
-                            print(f"Missing required album data for album {album_id}")
-                            continue
-
-                        # Collect unique artist IDs
-                        new_artists.add(artist_id)
-                        
-                        # Store album data
-                        tot_albums.append((album_id, name, artist_id, image_url, spotify_url))
-
-                # Update artist details in batches of 50 (Spotify API limit)
-                if new_artists:
-                    artist_chunks = [list(new_artists)[i:i + 50] for i in range(0, len(new_artists), 50)]
-                    for artist_chunk in artist_chunks:
-                        await self.update_artist_details(artist_chunk)
-                    print("Artist details updated successfully.")
-
-                # Insert the album data into PostgreSQL
                 if tot_albums:
-                    query = """
+                    query = text("""
                         INSERT INTO albums (album_id, name, artist_id, image_url, spotify_url)
-                        VALUES ($1, $2, $3, $4, $5)
+                        VALUES (:album_id, :name, :artist_id, :image_url, :spotify_url)
                         ON CONFLICT (album_id) DO NOTHING;
-                    """
-                    await self.db.executemany(query, tot_albums)
-                    print("Album details inserted successfully.")
+                    """)
+
+                    for album in tot_albums:
+                        await self.db.execute(query, {
+                            "album_id": album[0],
+                            "name": album[1],
+                            "artist_id": album[2],
+                            "image_url": album[3],
+                            "spotify_url": album[4]
+                        })
+
+            print("Album details inserted successfully.")
 
         except Exception as e:
             print(f"Error processing albums: {e}")
+
 
 
 

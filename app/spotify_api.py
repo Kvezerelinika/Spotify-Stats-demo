@@ -99,12 +99,17 @@ class SpotifyClient:
 
 
 
-    async def get_track(self, track_ids: List[str]): 
+    async def get_track(self, track_ids: List[str]):
         print("Starting to get_tracks from spotify_api.py")
-        print("Track_ids: ", track_ids)
-
         url = f"{SPOTIFY_API_URL}/tracks?ids={','.join(track_ids)}"
-        return await self._fetch_spotify_data(url, method_name="get_track")
+        
+        try:
+            response = await self._fetch_spotify_data(url, method_name="get_track")
+            return response
+        except Exception as e:
+            print(f"[get_track ERROR] Failed to fetch track data: {e}")
+            raise  # or return None
+
 
 
 

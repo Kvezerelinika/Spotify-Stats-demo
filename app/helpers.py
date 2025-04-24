@@ -19,8 +19,8 @@ class MusicDataService:
         try:
             query = text("SELECT * FROM users WHERE user_id = :user_id")
             result = await self.db.execute(query, {"user_id": self.user_id})
-            row = result.fetchone()
-            return dict(row) if row else None
+            row = result.fetchone() 
+            return dict(row._mapping) if row else None
         except Exception as e:
             logging.error(f"[DB] Error fetching user info for user_id={self.user_id}: {e}")
             return None
@@ -82,15 +82,13 @@ class MusicDataService:
     async def get_total_play_today(self):
         today = datetime.today().date()
         query = text("""SELECT COUNT(*) FROM listening_history WHERE user_id = :user_id AND DATE(played_at) = :today;""")
-        result = await self.db.execute(query, {"user_id": self.user_id, "today": today})
-        rows = result.fetchall()
-        return [dict(row._mapping) for row in rows]
+        result = await self.db.scalar(query, {"user_id": self.user_id, "today": today})
+        return result or 0
 
     async def get_total_play_count(self):
         query = text("""SELECT COUNT(*) FROM listening_history WHERE user_id = :user_id;""")
-        result = await self.db.execute(query, {"user_id": self.user_id})
-        rows = result.fetchall()
-        return [dict(row._mapping) for row in rows]
+        result = await self.db.scalar(query, {"user_id": self.user_id})
+        return result or 0
 
     async def get_total_listening_time(self):
         query = text("""
@@ -118,8 +116,7 @@ class MusicDataService:
     async def get_daily_listening_time(self):
         query = text("""
             SELECT DATE(lh.played_at) AS play_date,
-                SUM(t.duration_ms) / 60000 AS total_minutes,
-                SUM(t.duration_ms) / 3600000 AS total_hours
+                SUM(t.duration_ms) / 60000 AS total_minutes
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
             WHERE lh.user_id = :user_id AND t.duration_ms IS NOT NULL
