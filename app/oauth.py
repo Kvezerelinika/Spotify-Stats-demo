@@ -225,37 +225,53 @@ class SpotifyHandler:
         self.spotify_oauth = spotify_oauth
 
     async def handle_spotify_callback(self, request: Request) -> dict:
+        """
+        Handles the Spotify OAuth callback, exchanges the code for tokens,
+        fetches the user's profile, and stores it in the database.
+        """
         code = request.query_params.get("code")
         state = request.query_params.get("state")
 
         if not code or not state:
-            return {"error": "Authorization failed"}
+            raise HTTPException(status_code=400, detail="Missing code or state in callback URL")
 
         token_info = await self.spotify_oauth.get_spotify_token(code, state, request)
-        
+
         access_token = token_info.get("access_token")
         refresh_token = token_info.get("refresh_token")
-        
+
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token returned from Spotify")
+
+        # Initialize Spotify user handler
         user = SpotifyUser(access_token, refresh_token)
         user_profile = user.get_user_profile()
 
-        # Store user information in the database
-        db = await get_db_connection()  # Ensure get_db_connection() is defined elsewhere
+        # Store user info in database
+        db = await get_db_connection()
         await user.store_user_info_to_database(user_profile, db)
 
-        return {"user_profile": user_profile, "access_token": access_token}
-    
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user_id": user_profile.get("id"),
+            "user_profile": user_profile
+        }
+
     @staticmethod
     async def get_current_user(request: Request) -> dict | RedirectResponse | JSONResponse:
+        """
+        Get the currently authenticated user from the session and update their info in the DB.
+        """
         token = request.session.get("spotify_token")
         user_id = request.session.get("user_id")
 
         if not token or not user_id:
             return RedirectResponse(url="/login")
-        client = SpotifyClient(token)
 
-        # You could inject a custom version of this if needed, for now we use the procedural one
+        client = SpotifyClient(token)
         user_profile = await client.get_spotify_user_profile()
+
         if not user_profile:
             return JSONResponse(content={"error": "Failed to fetch user profile from Spotify."}, status_code=500)
 
@@ -263,13 +279,14 @@ class SpotifyHandler:
         user_instance = SpotifyUser(token)
         user_data = await user_instance.store_user_info_to_database(user_profile, db)
 
-        if user_data:
-            new_user_id = user_data.get("id")
-            if new_user_id and new_user_id != user_id:
-                request.session["user_id"] = new_user_id
-                user_id = new_user_id  # Update for return
+        new_user_id = user_data.get("id") if user_data else None
+        if new_user_id and new_user_id != user_id:
+            request.session["user_id"] = new_user_id
 
-        return {"token": token, "user_id": user_id}
+        return {
+            "token": token,
+            "user_id": request.session["user_id"]
+        }
 
 
 

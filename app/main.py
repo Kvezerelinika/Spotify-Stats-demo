@@ -6,13 +6,14 @@ from starlette.middleware.sessions import SessionMiddleware
 import time, asyncio, zipfile, json, logging, traceback
 from io import BytesIO
 from contextlib import asynccontextmanager
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime
 
 # Import Spotify helper functions
 from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
 from app.spotify_api import SpotifyClient
-from app.database import get_db_connection
-from app.helpers import MusicDataService, UserMusicUpdater
+from app.database import get_db_connection, AsyncSessionLocal
+from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
 
 
 # Function to fetch user data from Spotify
@@ -22,23 +23,51 @@ import httpx
 settings = OAuthSettings()
 spotify_oauth = SpotifyOAuth(settings)
 
+scheduler = AsyncIOScheduler()
 
-# Initialize FastAPI only once
-app = FastAPI() #(lifespan=lifespan)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start scheduler ONCE
+    if not scheduler.running:
+        scheduler.start()
+    yield
+    # Stop scheduler on shutdown
+    scheduler.shutdown()
+
+app = FastAPI(lifespan=lifespan)
 router = APIRouter()
 
-"""
-# ✅ Helper to refresh token every hour
-async def auto_refresh_token(oauth: SpotifyOAuth, refresh_token: str):
-    while True:
-        new_token = oauth.refresh_access_token(refresh_token)
-        if new_token:
-            print("Refreshed token:", new_token["access_token"])
-        else:
-            print("Failed to refresh token.")
-        await asyncio.sleep(3600)  # Sleep for an hour
+async def refresh_tokens_periodically():
+    async with AsyncSessionLocal() as db:
+        data_service = TokenRefresh(db)
+        users = await data_service.get_all_users_from_db()
 
-"""
+        spotify_oauth = SpotifyOAuth(settings)
+
+        for user in users:
+            if user.token_expires.timestamp() < time.time() + 3500:
+                new_token = spotify_oauth.get_valid_token(user.refresh_token)
+                if new_token:
+                    await data_service.update_user_token(
+                        user_id=user.user_id,
+                        access_token=new_token["access_token"],
+                        refresh_token=new_token["refresh_token"],
+                        token_expires=datetime.fromtimestamp(new_token["expires_at"])
+                    )
+                else:
+                    print(f"Failed to refresh token for user {user.user_id}.")
+            else:
+                print(f"Token for user {user.user_id} is still valid.")
+
+    await db.close()  # Always close the session when done
+
+# Scheduler to run refresh every 55 minutes
+scheduler = AsyncIOScheduler()
+scheduler.add_job(refresh_tokens_periodically, 'interval', minutes=55)
+
+# Start the scheduler when the app starts
+scheduler.start()
+
 
 # ✅ Session Middleware (Make sure secret_key is correctly set)
 app.add_middleware(SessionMiddleware, secret_key="your_super_secret_key", session_cookie="spotify_session")
@@ -128,47 +157,26 @@ async def logout(request: Request):
 
 @app.get("/callback")
 async def callback(request: Request):
-    """Handle Spotify OAuth callback."""
-    
-    # Extract 'code' and 'state' from query parameters
-    code = request.query_params.get("code")
     state = request.query_params.get("state")
-
-    if not code or not state:
-        raise HTTPException(status_code=400, detail="Missing code or state in the callback")
-
-    # Step 1: Verify the 'state' parameter to prevent CSRF attacks
     stored_state = request.session.get("spotify_auth_state")
-    if not stored_state or stored_state != state:
-        raise HTTPException(status_code=400, detail="State mismatch in callback. Possible CSRF attack.")
+
+    if not state or state != stored_state:
+        raise HTTPException(status_code=400, detail="State mismatch. Possible CSRF attack.")
 
     try:
-        # Step 2: Exchange the authorization code for an access token
-        token_response = await spotify_oauth.get_spotify_token(code, state, request)
+        spotify_handler = SpotifyHandler(settings, spotify_oauth)
+        result = await spotify_handler.handle_spotify_callback(request)
 
-        if "access_token" in token_response:
-            access_token = token_response["access_token"]
-            client_data = SpotifyClient(access_token)
+        request.session["spotify_token"] = result["access_token"]
+        request.session["user_id"] = result["user_profile"]["id"]
 
-            # Store the access token in session
-            request.session["spotify_token"] = access_token
+        return RedirectResponse(url="/dashboard")
 
-            # Step 3: Fetch user data from Spotify
-            user_info = await client_data.get_spotify_user_profile()
-
-            # Step 4: Extract user_id from user info and store it in session
-            user_id = user_info.get("id")
-            if user_id:
-                request.session["user_id"] = user_id  # Save user_id in session
-
-            # Redirect to the dashboard (or another page)
-            return RedirectResponse(url="/dashboard")
-        else:
-            raise HTTPException(status_code=400, detail="No access token returned.")
-    
     except Exception as e:
-        print(f"Error during token exchange: {str(e)}")
-        return {"error": f"Error during token exchange: {str(e)}"}
+        print(f"Callback error: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
 
 
 

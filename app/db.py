@@ -1,11 +1,10 @@
-from sqlalchemy import create_engine, Column, Integer, String, TIMESTAMP, ForeignKey, Boolean, Date
+from sqlalchemy import create_engine, Column, Integer, String, TIMESTAMP, ForeignKey, Boolean, Date, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import ARRAY
 from sqlalchemy.sql import func
-
 
 DATABASE_URL = "postgresql://postgres:Manowar28%40%40@localhost/postgres"
 
@@ -43,6 +42,10 @@ class User(Base):
     href = Column(String, nullable=True)
     uri = Column(String, nullable=True)
     type = Column(String, nullable=True)
+    access_token = Column(String, nullable=True)  # Access token for Spotify API
+    refresh_token = Column(String, nullable=True)  # Refresh token for Spotify API
+    token_expires = Column(DateTime(timezone=True))  # Expiration time for the access token
+
 
     # Add relationships if necessary (e.g., with listening_history, top_artists, etc.)
     listening_history = relationship("ListeningHistory", back_populates="users")

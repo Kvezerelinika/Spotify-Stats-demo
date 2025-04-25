@@ -2,11 +2,12 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from collections import Counter
-from sqlalchemy import text
+from sqlalchemy import text, select
 
 from app.spotify_api import SpotifyClient
 from app.crud import SpotifyDataSaver
 from app.database import get_db_connection
+from app.db import User
 
 import pytz, logging
 
@@ -196,6 +197,28 @@ class MusicDataService:
             genres_count.update(genres)
 
         return genres_count.most_common(5)
+    
+
+class TokenRefresh:
+    def __init__(self, db):
+        self.db = db
+        # This function should retrieve users with their refresh tokens and expiry times from your database
+    async def get_all_users_from_db(self):
+        result = await self.db.execute(
+            select(User).where(User.token_expires.isnot(None))
+        )
+        return result.scalars().all()
+
+    async def update_user_token(self, user_id, access_token: str, refresh_token: str, token_expires):
+        user = await self.db.get(User, user_id)
+        if user:
+            user.access_token = access_token
+            user.refresh_token = refresh_token
+            user.token_expires = token_expires
+            await self.db.commit()
+            print(f"Token updated for user {user_id}.")
+        else:
+            print(f"User with ID {user_id} not found.")
 
 
 
