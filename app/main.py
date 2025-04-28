@@ -46,12 +46,12 @@ async def refresh_tokens_periodically():
 
         for user in users:
             if user.token_expires.timestamp() < time.time() + 3500:
-                new_token = spotify_oauth.get_valid_token(user.refresh_token)
+                new_token = await spotify_oauth.refresh_access_token(user.refresh_token)
                 if new_token:
                     await data_service.update_user_token(
                         user_id=user.user_id,
                         access_token=new_token["access_token"],
-                        refresh_token=new_token["refresh_token"],
+                        refresh_token=new_token.get("refresh_token", user.refresh_token),
                         token_expires=datetime.fromtimestamp(new_token["expires_at"])
                     )
                 else:

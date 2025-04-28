@@ -1,8 +1,9 @@
-import requests, os, time, httpx, json, redis
+import requests, os, time, httpx, aiohttp, base64
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from app.database import get_db_connection
 from app.spotify_api import SpotifyClient
+from app.db import User
 
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import Request, HTTPException, status, FastAPI, Depends
@@ -12,7 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from starlette.requests import Request
 from typing import Optional
-from sqlalchemy import text
+from sqlalchemy import text, select
 from datetime import datetime, timedelta, timezone
 
 
@@ -36,6 +37,9 @@ class OAuthSettings:
         self.SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
         self.SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
 
+        client_creds = f"{self.SPOTIFY_CLIENT_ID}:{self.SPOTIFY_CLIENT_SECRET}"
+        self.client_credentials_b64 = base64.b64encode(client_creds.encode()).decode()
+
     def __str__(self):
         return f"OAuthSettings(client_id={self.SPOTIFY_CLIENT_ID}, redirect_uri={self.SPOTIFY_REDIRECT_URI})"
 
@@ -43,6 +47,9 @@ class OAuthSettings:
 class SpotifyOAuth:
     def __init__(self, settings: OAuthSettings):
         self.settings = settings
+        self.client_id = settings.SPOTIFY_CLIENT_ID
+        self.client_secret = settings.SPOTIFY_CLIENT_SECRET
+        self.redirect_uri = settings.SPOTIFY_REDIRECT_URI
 
     def get_spotify_login_url(self, request: Request) -> str:
         state = os.urandom(16).hex()
@@ -132,6 +139,44 @@ class SpotifyOAuth:
 
         print("No valid token available.")
         return None
+
+
+    async def refresh_access_token(self, refresh_token: str) -> dict:
+        url = "https://accounts.spotify.com/api/token"
+        headers = {
+            "Authorization": f"Basic {self.settings.client_credentials_b64}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=data) as response:
+                if response.status != 200:
+                    raise Exception(f"Failed to refresh token: {await response.text()}")
+                token_data = await response.json()
+                
+                # ✅ If a new refresh_token is provided by Spotify
+                if "refresh_token" in token_data:
+                    new_refresh_token = token_data["refresh_token"]
+                    await self.update_refresh_token_in_db(old_refresh_token=refresh_token, new_refresh_token=new_refresh_token)
+
+                # Always recalculate expires_at
+                token_data["expires_at"] = int(time.time()) + token_data["expires_in"]
+                return token_data
+
+    async def update_refresh_token_in_db(self, old_refresh_token: str, new_refresh_token: str):
+        async with get_db_connection() as session:
+            result = await session.execute(
+                select(User).where(User.refresh_token == old_refresh_token)
+            )
+            user = result.scalar_one_or_none()
+
+            if user:
+                user.refresh_token = new_refresh_token
+                await session.commit()
 
 
 class SpotifyUser:
