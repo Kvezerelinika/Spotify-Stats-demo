@@ -29,6 +29,7 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     # Start scheduler ONCE
     if not scheduler.running:
+        scheduler.add_job(refresh_tokens_periodically, 'interval', minutes=55)
         scheduler.start()
     yield
     # Stop scheduler on shutdown
@@ -42,32 +43,26 @@ async def refresh_tokens_periodically():
         data_service = TokenRefresh(db)
         users = await data_service.get_all_users_from_db()
 
-        spotify_oauth = SpotifyOAuth(settings)
-
         for user in users:
-            if user.token_expires.timestamp() < time.time() + 3500:
-                new_token = await spotify_oauth.refresh_access_token(user.refresh_token)
-                if new_token:
-                    await data_service.update_user_token(
-                        user_id=user.user_id,
-                        access_token=new_token["access_token"],
-                        refresh_token=new_token.get("refresh_token", user.refresh_token),
-                        token_expires=datetime.fromtimestamp(new_token["expires_at"])
-                    )
+            try:
+                if user.token_expires.timestamp() < time.time() + 300:
+                    new_token = await spotify_oauth.refresh_access_token(user.refresh_token)
+                    if new_token:
+                        await data_service.update_user_token(
+                            user_id=user.user_id,
+                            access_token=new_token["access_token"],
+                            refresh_token=new_token["refresh_token"] if "refresh_token" in new_token else user.refresh_token,
+                            token_expires=datetime.fromtimestamp(new_token["expires_at"])
+
+                        )
+                        print("Old refresh token:", user.refresh_token)
+                        print("New token data:", new_token)
+                    else:
+                        print(f"Failed to refresh token for user {user.user_id}.")
                 else:
-                    print(f"Failed to refresh token for user {user.user_id}.")
-            else:
-                print(f"Token for user {user.user_id} is still valid.")
-
-    await db.close()  # Always close the session when done
-
-# Scheduler to run refresh every 55 minutes
-scheduler = AsyncIOScheduler()
-scheduler.add_job(refresh_tokens_periodically, 'interval', minutes=55)
-
-# Start the scheduler when the app starts
-scheduler.start()
-
+                    print(f"[{datetime.now()}] Token for user {user.user_id} is still valid.")
+            except Exception as e:
+                print(f"Error refreshing token for user {user.user_id}: {e}")
 
 # ✅ Session Middleware (Make sure secret_key is correctly set)
 app.add_middleware(SessionMiddleware, secret_key="your_super_secret_key", session_cookie="spotify_session")

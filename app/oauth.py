@@ -92,30 +92,6 @@ class SpotifyOAuth:
 
         return token_info
 
-    def refresh_access_token(self, refresh_token: str) -> Optional[dict]:
-        url = self.settings.SPOTIFY_TOKEN_URL
-        data = {
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": self.settings.SPOTIFY_CLIENT_ID,
-            "client_secret": self.settings.SPOTIFY_CLIENT_SECRET
-        }
-
-        try:
-            response = requests.post(url, data=data)
-            response.raise_for_status()
-            new_token_data = response.json()
-
-            if "access_token" in new_token_data:
-                return new_token_data
-
-            print("Error refreshing token: Missing 'access_token' in response.", new_token_data)
-            return None
-
-        except requests.exceptions.RequestException as e:
-            print(f"Error refreshing token: {e}")
-            return None
-
     def get_valid_token(self, request: Request) -> Optional[str]:
         token = request.session.get("spotify_token")
         refresh_token = request.session.get("refresh_token")
