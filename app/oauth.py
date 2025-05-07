@@ -105,6 +105,7 @@ class SpotifyOAuth:
         if refresh_token:
             print("Token expired, attempting to refresh...")
             new_token_data = self.refresh_access_token(refresh_token)
+            print("New token data:", new_token_data)
             if new_token_data:
                 new_token = new_token_data.get("access_token")
                 expires_in = new_token_data.get("expires_in", 3600)  # Default to 3600 seconds if not provided
@@ -118,6 +119,7 @@ class SpotifyOAuth:
 
 
     async def refresh_access_token(self, refresh_token: str) -> dict:
+        print("Starting to refresh access token...")
         url = "https://accounts.spotify.com/api/token"
         headers = {
             "Authorization": f"Basic {self.settings.client_credentials_b64}",
@@ -127,9 +129,11 @@ class SpotifyOAuth:
             "grant_type": "refresh_token",
             "refresh_token": refresh_token
         }
-
+        print("got data from API")
         async with aiohttp.ClientSession() as session:
+            print("started async session")
             async with session.post(url, headers=headers, data=data) as response:
+                print("got response from API:", response.status)
                 if response.status != 200:
                     raise Exception(f"Failed to refresh token: {await response.text()}")
                 token_data = await response.json()
@@ -137,6 +141,7 @@ class SpotifyOAuth:
                 # ✅ If a new refresh_token is provided by Spotify
                 if "refresh_token" in token_data:
                     new_refresh_token = token_data["refresh_token"]
+                    print("New refresh token received:", new_refresh_token)
                     await self.update_refresh_token_in_db(old_refresh_token=refresh_token, new_refresh_token=new_refresh_token)
 
                 # Always recalculate expires_at
@@ -144,6 +149,7 @@ class SpotifyOAuth:
                 return token_data
 
     async def update_refresh_token_in_db(self, old_refresh_token: str, new_refresh_token: str):
+        print(f"Updating refresh token in DB: {old_refresh_token} -> {new_refresh_token}")
         async with get_db_connection() as session:
             result = await session.execute(
                 select(User).where(User.refresh_token == old_refresh_token)
@@ -189,6 +195,8 @@ class SpotifyUser:
 
             # Compute token expiry timestamp
             token_expires = datetime.now(timezone.utc) + timedelta(seconds=self.expires_in)
+            print("Access token:", self.access_token)
+            print("Refresh token:", self.refresh_token)
 
             query = text("""
                 INSERT INTO users (user_id, display_name, profile_url, image_url, username, email, country, product, 
@@ -245,39 +253,47 @@ class SpotifyHandler:
         self.oauth_settings = oauth_settings
         self.spotify_oauth = spotify_oauth
 
-    async def handle_spotify_callback(self, request: Request) -> dict:
-        """
-        Handles the Spotify OAuth callback, exchanges the code for tokens,
-        fetches the user's profile, and stores it in the database.
-        """
-        code = request.query_params.get("code")
-        state = request.query_params.get("state")
+async def handle_spotify_callback(self, request: Request) -> dict:
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
 
-        if not code or not state:
-            raise HTTPException(status_code=400, detail="Missing code or state in callback URL")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing code or state in callback URL")
 
-        token_info = await self.spotify_oauth.get_spotify_token(code, state, request)
+    token_info = await self.spotify_oauth.get_spotify_token(code, state, request)
 
-        access_token = token_info.get("access_token")
-        refresh_token = token_info.get("refresh_token")
+    access_token = token_info.get("access_token")
+    refresh_token = token_info.get("refresh_token")
+    expires_in = token_info.get("expires_in")
 
-        if not access_token:
-            raise HTTPException(status_code=400, detail="No access token returned from Spotify")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token returned from Spotify")
 
-        # Initialize Spotify user handler
-        user = SpotifyUser(access_token, refresh_token)
-        user_profile = user.get_user_profile()
+    # ✅ Create user instance
+    user = SpotifyUser(access_token, refresh_token)
 
-        # Store user info in database
-        db = await get_db_connection()
-        await user.store_user_info_to_database(user_profile, db)
+    # ✅ Set these values explicitly so store_user_info_to_database can use them
+    user.access_token = access_token
+    user.refresh_token = refresh_token
+    user.expires_in = expires_in
 
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "user_id": user_profile.get("id"),
-            "user_profile": user_profile
-        }
+    # ✅ Optional debug logs
+    print("[Callback] Access token:", access_token)
+    print("[Callback] Refresh token:", refresh_token)
+
+    # Fetch user profile
+    user_profile = await user.get_user_profile()
+
+    # Save to DB
+    db = await get_db_connection()
+    await user.store_user_info_to_database(user_profile, db)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "user_id": user_profile.get("id"),
+        "user_profile": user_profile
+    }
 
     @staticmethod
     async def get_current_user(request: Request) -> dict | RedirectResponse | JSONResponse:

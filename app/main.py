@@ -29,7 +29,7 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     # Start scheduler ONCE
     if not scheduler.running:
-        scheduler.add_job(refresh_tokens_periodically, 'interval', minutes=55)
+        scheduler.add_job(refresh_tokens_periodically, 'interval', minutes=5)
         scheduler.start()
     yield
     # Stop scheduler on shutdown
@@ -39,24 +39,28 @@ app = FastAPI(lifespan=lifespan)
 router = APIRouter()
 
 async def refresh_tokens_periodically():
+    print("starting token refresh job")
     async with AsyncSessionLocal() as db:
+        print("[Scheduler] Token refresh job started.")
         data_service = TokenRefresh(db)
         users = await data_service.get_all_users_from_db()
 
         for user in users:
+            print(f"[Scheduler] Refreshing token for user {user.user_id}.")
             try:
                 if user.token_expires.timestamp() < time.time() + 300:
+                    print("user.token_expires.timestamp(): ", user.token_expires.timestamp())
                     new_token = await spotify_oauth.refresh_access_token(user.refresh_token)
+                    print("New token data:", new_token)
                     if new_token:
                         await data_service.update_user_token(
                             user_id=user.user_id,
                             access_token=new_token["access_token"],
                             refresh_token=new_token["refresh_token"] if "refresh_token" in new_token else user.refresh_token,
                             token_expires=datetime.fromtimestamp(new_token["expires_at"])
-
                         )
                         print("Old refresh token:", user.refresh_token)
-                        print("New token data:", new_token)
+
                     else:
                         print(f"Failed to refresh token for user {user.user_id}.")
                 else:
