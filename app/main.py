@@ -7,14 +7,13 @@ import time, asyncio, zipfile, json, logging, traceback
 from io import BytesIO
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # Import Spotify helper functions
 from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
 from app.spotify_api import SpotifyClient
 from app.database import get_db_connection, AsyncSessionLocal
 from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
-
 
 # Function to fetch user data from Spotify
 import time
@@ -45,26 +44,33 @@ async def refresh_tokens_periodically():
         data_service = TokenRefresh(db)
         users = await data_service.get_all_users_from_db()
 
+        now = datetime.now(timezone.utc)
+        buffer = timedelta(minutes=5)
+
         for user in users:
-            print(f"[Scheduler] Refreshing token for user {user.user_id}.")
             try:
-                if user.token_expires.timestamp() < time.time() + 300:
-                    print("user.token_expires.timestamp(): ", user.token_expires.timestamp())
+                expires_at = user.token_expires
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+                print(f"[{now}] Checking user {user.user_id} token expiry: {expires_at} (UTC)")
+
+                if expires_at <= now + buffer:
+                    print(f"[{now}] Token for user {user.user_id} is expiring or expired. Refreshing...")
                     new_token = await spotify_oauth.refresh_access_token(user.refresh_token)
                     print("New token data:", new_token)
+
                     if new_token:
                         await data_service.update_user_token(
                             user_id=user.user_id,
                             access_token=new_token["access_token"],
-                            refresh_token=new_token["refresh_token"] if "refresh_token" in new_token else user.refresh_token,
-                            token_expires=datetime.fromtimestamp(new_token["expires_at"])
+                            refresh_token=new_token.get("refresh_token", user.refresh_token),
+                            token_expires=datetime.fromtimestamp(new_token["expires_at"], tz=timezone.utc)
                         )
-                        print("Old refresh token:", user.refresh_token)
-
                     else:
                         print(f"Failed to refresh token for user {user.user_id}.")
                 else:
-                    print(f"[{datetime.now()}] Token for user {user.user_id} is still valid.")
+                    print(f"[{now}] Token for user {user.user_id} is still valid.")
             except Exception as e:
                 print(f"Error refreshing token for user {user.user_id}: {e}")
 

@@ -1,7 +1,7 @@
 from app.database import get_db_connection
 from app.spotify_api import SpotifyClient
 import json, time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 
 from sqlalchemy import delete, select
@@ -45,6 +45,11 @@ class SpotifyDataSaver:
 
                 result = await self.db.execute(select(Artist.artist_id))
                 existing_artist_ids = {row[0] for row in result.all()}
+
+            current_time = datetime.now(timezone.utc)
+            if current_time.tzinfo is not None:
+                current_time = current_time.replace(tzinfo=None)
+
 
             # Delete existing user artist rankings for this time_range
             await self.db.execute(
