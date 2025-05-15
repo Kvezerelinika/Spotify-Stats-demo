@@ -7,6 +7,7 @@
 {% block main %}
 
 <script>
+    // Function to Load more track history
     document.addEventListener("DOMContentLoaded", function () {
         let currentPage = 1;
         const moreBtn = document.getElementById("more-btn");
@@ -54,6 +55,7 @@
 
 
 <script>
+    // Function to Change dashboard time range
     document.getElementById('timeRangeSelect').addEventListener('change', function() {
         const selectedRange = this.value;
     
@@ -70,6 +72,7 @@
     
 
 <script>
+    // function to Tab switching (show/hide tab content)
     document.querySelectorAll('.sidebar a').forEach(tab => {
         tab.addEventListener('click', function(event) {
             event.preventDefault(); // Prevent the default link behavior
@@ -230,6 +233,8 @@
 
 
 
+<input type="date" id="date-search" />
+<button id="search-btn">Search</button>
 
 <div id="daily-plays" class="tab-content" style="display: none;">
     <h2>DAILY PLAYS</h2>
@@ -237,13 +242,13 @@
             <!-- Today Section -->
             <div id="today">
                 <h3>Today - 
-                    <span id="today-streams">{{ today_streams }}</span> streams, 
-                    <span id="today-time">{{ today_time }}</span> total time
+                    <span id="today-streams">{{ records_by_time['Today'].streams }}</span> streams, 
+                    <span id="today-time">{{ (records_by_time['Today'].total_duration / 60000) | round(2) }} min</span> total time
                 </h3>
                 <div class="track-list" id="today-list">
-                    {% for track in records_by_time['Today'] %}
+                    {% for track in records_by_time['Today'].tracks %}
                         <div class="track">
-                            <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div class="track-time">{{ track['played_at'] }}</div>
                             <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                         </div>
                     {% endfor %}
@@ -253,13 +258,13 @@
             <!-- Yesterday Section -->
             <div id="yesterday">
                 <h3>Yesterday - 
-                    <span id="yesterday-streams">{{ yesterday_streams }}</span> streams, 
-                    <span id="yesterday-time">{{ yesterday_time }}</span> total time
+                    <span id="yesterday-streams">{{ records_by_time['Yesterday'].streams }}</span> streams, 
+                    <span id="yesterday-time">{{ (records_by_time['Yesterday'].total_duration / 60000) | round(2) }} min</span> total time
                 </h3>
                 <div class="track-list" id="yesterday-list">
-                    {% for track in records_by_time['Yesterday'] %}
+                    {% for track in records_by_time['Yesterday'].tracks %}
                         <div class="track">
-                            <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div class="track-time">{{ track['played_at'] }}</div>
                             <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                         </div>
                     {% endfor %}
@@ -269,29 +274,13 @@
             <!-- This Week Section -->
             <div id="this-week">
                 <h3>This Week - 
-                    <span id="this-week-streams">{{ this_week_streams }}</span> streams, 
-                    <span id="this-week-time">{{ this_week_time }}</span> total time
+                    <span id="this-week-streams">{{ records_by_time['This Week'].streams }}</span> streams, 
+                    <span id="this-week-time">{{ (records_by_time['This Week'].total_duration / 60000) | round(2) }} min</span> total time
                 </h3>
                 <div class="track-list" id="this-week-list">
-                    {% for track in records_by_time['This Week'] %}
+                    {% for track in records_by_time['This Week'].tracks %}
                         <div class="track">
-                            <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
-                            <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <!-- Last Week Section -->
-            <div id="last-week">
-                <h3>Last Week - 
-                    <span id="last-week-streams">{{ last_week_streams }}</span> streams, 
-                    <span id="last-week-time">{{ last_week_time }}</span> total time
-                </h3>
-                <div class="track-list" id="last-week-list">
-                    {% for track in records_by_time['Last Week'] %}
-                        <div class="track">
-                            <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div class="track-time">{{ track['played_at'] }}</div>
                             <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                         </div>
                     {% endfor %}
@@ -301,13 +290,13 @@
             <!-- This Month Section -->
             <div id="this-month">
                 <h3>This Month - 
-                    <span id="this-month-streams">{{ this_month_streams }}</span> streams, 
-                    <span id="this-month-time">{{ this_month_time }}</span> total time
+                    <span id="this-month-streams">{{ records_by_time['This Month'].streams }}</span> streams, 
+                    <span id="this-month-time">{{ (records_by_time['This Month'].total_duration / 60000) | round(2) }} min</span> total time
                 </h3>
                 <div class="track-list" id="this-month-list">
-                    {% for track in records_by_time['This Month'] %}
+                    {% for track in records_by_time['This Month'].tracks %}
                         <div class="track">
-                            <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div class="track-time">{{ track['played_at'] }}</div>
                             <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                         </div>
                     {% endfor %}
@@ -317,13 +306,13 @@
             <!-- Older Section -->
             <div id="older">
                 <h3>Older - 
-                    <span id="older-streams">{{ older_streams }}</span> streams, 
-                    <span id="older-time">{{ older_time }}</span> total time
+                    <span id="older-streams">{{ records_by_time['Older'].streams }}</span> streams, 
+                    <span id="older-time">{{ (records_by_time['Older'].total_duration / 60000) | round(2) }} min</span> total time
                 </h3>
                 <div class="track-list" id="older-list">
-                    {% for track in records_by_time['Older'] %}
+                    {% for track in records_by_time['Older'].tracks %}
                         <div class="track">
-                            <div class="track-time">{{ track['played_at'].strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div class="track-time">{{ track['played_at']}}</div>
                             <div class="track-info">{{ track['name'] }} by {{ track['artist_name'] }}</div>
                         </div>
                     {% endfor %}
@@ -333,8 +322,7 @@
             <button id="more-btn">More</button>
         </div>
 
-    <input type="date" id="date-search" />
-    <button id="search-btn">Search</button>
+
 
 
 

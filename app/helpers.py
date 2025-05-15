@@ -153,30 +153,46 @@ class MusicDataService:
         start_of_last_week = start_of_week - timedelta(weeks=1)
         end_of_last_week = start_of_week - timedelta(days=1)
         start_of_this_month = today_start.replace(day=1)
-        end_of_this_month = (start_of_this_month.replace(month=now.month % 12 + 1, day=1) - timedelta(days=1))
+        end_of_this_month = (start_of_this_month.replace(
+            month=(now.month % 12 + 1) if now.month < 12 else 1,
+            year=now.year if now.month < 12 else now.year + 1,
+            day=1
+        ) - timedelta(days=1))
 
-        time_groups = {"Today": [], "Yesterday": [], "This Week": [], "This Month": [], "Older": []}
+        time_groups = {
+            "Today": {"tracks": [], "streams": 0, "total_duration": 0},
+            "Yesterday": {"tracks": [], "streams": 0, "total_duration": 0},
+            "This Week": {"tracks": [], "streams": 0, "total_duration": 0},
+            "This Month": {"tracks": [], "streams": 0, "total_duration": 0},
+            "Older": {"tracks": [], "streams": 0, "total_duration": 0},
+        }
 
         for track in records:
             played_at = track['played_at']
             if isinstance(played_at, str):
                 played_at = datetime.fromisoformat(played_at)
 
+            duration = track.get("duration_ms", 0)
+
             if played_at.date() == today_start.date():
-                time_groups["Today"].append(track)
+                group = "Today"
             elif played_at.date() == yesterday_start.date():
-                time_groups["Yesterday"].append(track)
+                group = "Yesterday"
             elif start_of_week <= played_at < today_start:
-                time_groups["This Week"].append(track)
+                group = "This Week"
             elif start_of_last_week <= played_at <= end_of_last_week:
                 if not (start_of_this_month <= played_at <= end_of_this_month):
-                    time_groups["This Week"].append(track)
+                    group = "This Week"
                 else:
-                    time_groups["Older"].append(track)
+                    group = "Older"
             elif start_of_this_month <= played_at <= end_of_this_month:
-                time_groups["This Month"].append(track)
+                group = "This Month"
             else:
-                time_groups["Older"].append(track)
+                group = "Older"
+
+            time_groups[group]["tracks"].append(track)
+            time_groups[group]["streams"] += 1
+            time_groups[group]["total_duration"] += duration
 
         return time_groups
 
