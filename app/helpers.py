@@ -300,7 +300,7 @@ class UserMusicUpdater:
         intervals = {
             "top_artists": timedelta(weeks=12 if time_range == "long_term" else 6 if time_range == "medium_term" else 4),
             "top_tracks": timedelta(days=1 if time_range == "short_term" else 7 if time_range == "medium_term" else 28),
-            "recent_tracks": timedelta(minutes=50),
+            "recent_tracks": timedelta(minutes=5),
         }
 
         interval = intervals[data_type]
