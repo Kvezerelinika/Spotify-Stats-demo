@@ -8,26 +8,7 @@
 <div class="container mx-auto p-6 max-w-3xl">
     <h1 class="text-3xl font-bold mb-6">Your Profile</h1>
 
-    <!-- User Settings -->
-    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow mb-6">
-        <h2 class="text-xl font-semibold mb-4">🗂️ User Settings</h2>
-        <form method="POST" action="/update_settings">
-            <div class="mb-4">
-                <label for="theme" class="block font-medium">Preferred Theme:</label>
-                <select name="theme" id="theme" class="w-full p-2 rounded">
-                    <option value="light" {% if user.theme == 'light' %}selected{% endif %}>Light</option>
-                    <option value="dark" {% if user.theme == 'dark' %}selected{% endif %}>Dark</option>
-                </select>
-            </div>
 
-            <div class="mb-4">
-                <label for="language" class="block font-medium">Preferred Language:</label>
-                <select name="language" id="language" class="w-full p-2 rounded">
-                    <option value="en" {% if user.language == 'en' %}selected{% endif %}>English</option>
-                    <option value="ka" {% if user.language == 'ka' %}selected{% endif %}>Georgian</option>
-                    <!-- Add more languages as needed -->
-                </select>
-            </div>
 
             <div class="flex justify-between mt-6">
                 <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Save Settings</button>
@@ -42,26 +23,17 @@
 
         <div class="mb-4">
             <label class="block font-medium">Custom Username:</label>
-            <p class="text-gray-700 dark:text-gray-300">{{ user.custom_username or "Not set" }}</p>
+            <p class="text-gray-700 dark:text-gray-300"></p>
         </div>
 
         <div class="mb-4">
             <label class="block font-medium">Profile Bio:</label>
-            <p class="text-gray-700 dark:text-gray-300">{{ user.bio or "No bio provided." }}</p>
-        </div>
-
-        <div class="mb-4">
-            <label class="block font-medium">Avatar:</label>
-            {% if user.avatar_url %}
-                <img src="{{ user.avatar_url }}" alt="Avatar" class="w-24 h-24 rounded-full border">
-            {% else %}
-                <p class="text-gray-500 italic">No avatar uploaded.</p>
-            {% endif %}
+            <p class="text-gray-700 dark:text-gray-300"></p>
         </div>
 
         <div class="mb-4">
             <label class="block font-medium">Friends / Followers:</label>
-            <p class="text-gray-700 dark:text-gray-300">{{ user.followers_count or 0 }} followers, {{ user.following_count or 0 }} following</p>
+            <p class="text-gray-700 dark:text-gray-300"> following</p>
         </div>
 
         <div class="mb-4">
@@ -73,7 +45,7 @@
     <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow">
         <h2 class="text-xl font-semibold mb-4">🔄 Last Synced</h2>
         <p class="text-gray-700 dark:text-gray-300">
-            Last synced: {{ user.last_synced or "Never synced" }}
+            Last synced: 
         </p>
         <a href="/sync" class="inline-block mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Refresh My Stats</a>
     </div>

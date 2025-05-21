@@ -290,42 +290,10 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
 
 
 @app.get("/profile")
-async def profile(request: Request, user_data: dict = Depends(SpotifyHandler.get_current_user)):
-    db = None
-    try:
-        token = user_data["token"]
-        refresh_token = user_data.get("refresh_token")
-        user_id = user_data["user_id"]
+async def profile(request: Request):
+    return templates.TemplateResponse("profile.html", {"request": request})
 
-        db = await get_db_connection()
 
-        spotify_user = SpotifyUser(access_token=token, refresh_token=refresh_token)
-        user_profile_data = spotify_user.get_user_profile()
-        await spotify_user.store_user_info_to_database(user_profile_data, db)
-
-        # Temporary context with just basic profile info
-        user_info = user_profile_data
-        settings = {}
-        social_data = {}
-        sync_info = {}
-
-    except Exception as e:
-        error_traceback = traceback.format_exc()
-        print(f"Error fetching profile data: {str(e)}\nTraceback:\n{error_traceback}")
-        return JSONResponse(content={"error": "An error occurred loading your profile."}, status_code=500)
-    finally:
-        if db:
-            await db.close()
-
-    context = {
-        "request": request,
-        "user_info": user_info,
-        "settings": settings,
-        "social_data": social_data,
-        "last_synced": None
-    }
-
-    return templates.TemplateResponse("profile.html", context)
 
 
 
