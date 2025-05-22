@@ -5,49 +5,62 @@
 {% endblock %}
 
 {% block main %}
-<div class="container mx-auto p-6 max-w-3xl">
-    <h1 class="text-3xl font-bold mb-6">Your Profile</h1>
+    {% if user_id %}
+        <div class="container mx-auto p-6 max-w-3xl">
+            <h1 class="text-3xl font-bold mb-6">Welcome, {{ user_name }}</h1>
 
-
-
-            <div class="flex justify-between mt-6">
-                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Save Settings</button>
-                <a href="/disconnect" class="text-red-600 hover:underline">Disconnect Spotify</a>
+            <div class="bg-dark dark:bg-gray-800 p-4 rounded-2xl shadow mb-6">
+                <form method="POST" action="/update_settings">
+                    <div class="flex justify-between mt-6">
+                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-dark px-4 py-2 rounded">Save Settings</button>
+                        <a href="/disconnect" class="text-red-600 hover:underline">Disconnect Spotify</a>
+                    </div>
+                </form>
             </div>
-        </form>
-    </div>
 
-    <!-- Social Features -->
-    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow mb-6">
-        <h2 class="text-xl font-semibold mb-4">🤝 Social Features</h2>
+            <!-- Social Features -->
+            <div class="bg-dark dark:bg-gray-800 p-4 rounded-2xl shadow mb-6">
+                <h2 class="text-xl font-semibold mb-4">🤝 Social Features</h2>
 
-        <div class="mb-4">
-            <label class="block font-medium">Custom Username:</label>
-            <p class="text-gray-700 dark:text-gray-300"></p>
+                <div class="mb-4">
+                    <label class="block font-medium text-white">Custom Username:</label>
+                    <p class="text-white"></p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block font-medium text-white">Profile Bio:</label>
+                    <p class="text-white"></p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block font-medium text-white">Friends / Followers:</label>
+                    <p class="text-white"> following</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block font-medium text-white">Language</label>
+                    <p class="text-white"></p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block font-medium text-white">Time Zone</label>
+                    <p class="text-white"></p>
+                </div>
+            </div>
+
+            <!-- Last Synced Info -->
+            <div class="bg-dark dark:bg-gray-800 p-4 rounded-2xl shadow">
+                <h2 class="text-xl font-semibold mb-4">🔄 Last Synced</h2>
+                <p class="text-white">
+                    Last synced: 
+                </p>
+                <a href="/sync" class="inline-block mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Refresh My Stats</a>
+            </div>
         </div>
+    {% else %}
 
-        <div class="mb-4">
-            <label class="block font-medium">Profile Bio:</label>
-            <p class="text-gray-700 dark:text-gray-300"></p>
-        </div>
+            user should be redirected to login page
 
-        <div class="mb-4">
-            <label class="block font-medium">Friends / Followers:</label>
-            <p class="text-gray-700 dark:text-gray-300"> following</p>
-        </div>
+        {% endif %}
 
-        <div class="mb-4">
-            <a href="/compare" class="text-blue-600 hover:underline">Compare Stats with Friends</a>
-        </div>
-    </div>
-
-    <!-- Last Synced Info -->
-    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow">
-        <h2 class="text-xl font-semibold mb-4">🔄 Last Synced</h2>
-        <p class="text-gray-700 dark:text-gray-300">
-            Last synced: 
-        </p>
-        <a href="/sync" class="inline-block mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Refresh My Stats</a>
-    </div>
-</div>
 {% endblock %}

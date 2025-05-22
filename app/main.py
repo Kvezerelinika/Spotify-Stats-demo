@@ -90,21 +90,22 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 @app.get("/")
 async def root(request: Request):
     # Get the Spotify token from the session (None if not logged in)
-    token = request.session.get("spotify_token")
-    client_data = SpotifyClient(token)
+    access_token = request.session.get("spotify_token")
+    client_data = SpotifyClient(access_token)
 
     # Default values in case the user is not logged in
     user_image, user_name = None, "Guest"
 
     # If the user is logged in, fetch user profile data
-    if token:
+    if access_token:
         db = get_db_connection()
         cursor = db.cursor()
 
         # Get the user profile from Spotify
         user_profile = await client_data.get_spotify_user_profile()
-        user_data = SpotifyUser.user_info_to_database(user_profile)
-        user_id = user_data[0][0]
+        spotify_user = SpotifyUser(access_token)
+        user_data = await spotify_user.store_user_info_to_database(user_profile, db)
+        user_id = user_data["id"]
 
         # Fetch user info from the database (image and name)
         cursor.execute("SELECT images, display_name FROM users WHERE id = %s;", (user_id,))
@@ -288,11 +289,49 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
 
     return templates.TemplateResponse("dashboard.html", context)
 
+from sqlalchemy import select
+from app.db import User  # Assuming User is a SQLAlchemy model
 
 @app.get("/profile")
 async def profile(request: Request):
-    return templates.TemplateResponse("profile.html", {"request": request})
+    access_token = request.session.get("spotify_token")
+    client_data = SpotifyClient(access_token)
 
+    user_image, user_name = None, "Guest"
+
+    if access_token:
+        db = await get_db_connection()
+
+        # Get the user profile from Spotify
+        user_profile = await client_data.get_spotify_user_profile()
+        spotify_user = SpotifyUser(access_token)
+        user_data = await spotify_user.store_user_info_to_database(user_profile, db)
+        user_id = user_data["id"]
+
+        stmt = select(User.user_id, User.image_url, User.display_name).where(User.user_id == user_id)
+        result = await db.execute(stmt)
+        user_info = result.one_or_none()
+
+        if user_info:
+            user_info_dict = dict(user_info._mapping)
+            user_image = user_info_dict["image_url"]       
+            user_name = user_info_dict["display_name"]
+            user_id = user_info_dict["user_id"]  
+        else:
+            user_image, user_name, user_id = None, "Unknown User"
+
+        await db.close()
+
+        # Final check: if somehow no user_name
+    if not access_token or not user_id or user_name == "Guest":
+        return RedirectResponse(url="/login", status_code=302)
+
+    return templates.TemplateResponse("profile.html", {
+        "request": request,
+        "user_image": user_image,
+        "user_name": user_name,
+        "user_id": user_id
+    })
 
 
 
@@ -369,11 +408,13 @@ async def upload_page(request: Request):
 
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
-    token = request.session.get("spotify_token")
-    client_data = SpotifyClient(token)
+    db = await get_db_connection()
+    access_token = request.session.get("spotify_token")
+    client_data = SpotifyClient(access_token)
     user_profile = await client_data.get_spotify_user_profile()
-    user_data = SpotifyUser.user_info_to_database(user_profile)
-    user_id = user_data[0][0] 
+    spotify_user = SpotifyUser(access_token)
+    user_data = await spotify_user.store_user_info_to_database(user_profile, db)
+    user_id = user_data["id"]
 
     # recent tracks artist and image_url update
     # cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
