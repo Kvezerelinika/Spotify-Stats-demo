@@ -5,62 +5,74 @@
 {% endblock %}
 
 {% block main %}
-    {% if user_id %}
-        <div class="container mx-auto p-6 max-w-3xl">
-            <h1 class="text-3xl font-bold mb-6">Welcome, {{ user_name }}</h1>
 
-            <div class="bg-dark dark:bg-gray-800 p-4 rounded-2xl shadow mb-6">
-                <form method="POST" action="/update_settings">
-                    <div class="flex justify-between mt-6">
-                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-dark px-4 py-2 rounded">Save Settings</button>
-                        <a href="/disconnect" class="text-red-600 hover:underline">Disconnect Spotify</a>
-                    </div>
-                </form>
-            </div>
+    <div class="profile-page-container">
+        <img src="{{ user_image }}" alt="Profile Image" class="profile-img">
+    </div>
 
-            <!-- Social Features -->
-            <div class="bg-dark dark:bg-gray-800 p-4 rounded-2xl shadow mb-6">
-                <h2 class="text-xl font-semibold mb-4">🤝 Social Features</h2>
 
-                <div class="mb-4">
-                    <label class="block font-medium text-white">Custom Username:</label>
-                    <p class="text-white"></p>
-                </div>
+    <form method="POST" action="/update_settings" id="settings-form">
+    <!-- Edit Button -->
+    <div class="flex justify-end mb-4">
+        <button type="button" onclick="toggleEdit()" class="text-blue-400 hover:text-blue-600">
+            ✏️ Edit
+        </button>
+    </div>
 
-                <div class="mb-4">
-                    <label class="block font-medium text-white">Profile Bio:</label>
-                    <p class="text-white"></p>
-                </div>
+    <!-- Custom Username -->
+    <div class="mb-4">
+        <label class="block font-medium text-white">Custom Username:</label>
+        <p id="custom_username_display" class="text-white">{{ custom_username or 'Not set' }}</p>
+        <input type="text" name="custom_username" value="{{ custom_username or '' }}"
+               class="w-full p-2 rounded bg-gray-700 text-white hidden editable" />
+    </div>
 
-                <div class="mb-4">
-                    <label class="block font-medium text-white">Friends / Followers:</label>
-                    <p class="text-white"> following</p>
-                </div>
+    <!-- Profile Bio -->
+    <div class="mb-4">
+        <label class="block font-medium text-white">Profile Bio:</label>
+        <p id="bio_display" class="text-white">{{ bio or 'Not set' }}</p>
+        <textarea name="bio" class="w-full p-2 rounded bg-gray-700 text-white hidden editable">{{ bio or '' }}</textarea>
+    </div>
 
-                <div class="mb-4">
-                    <label class="block font-medium text-white">Language</label>
-                    <p class="text-white"></p>
-                </div>
+    <!-- Language -->
+    <div class="mb-4">
+        <label class="block font-medium text-white">Language:</label>
+        <p id="language_display" class="text-white">{{ language or 'Not set' }}</p>
+        <input name="language" value="{{ language or '' }}"
+               class="w-full p-2 rounded bg-gray-700 text-white hidden editable" />
+    </div>
 
-                <div class="mb-4">
-                    <label class="block font-medium text-white">Time Zone</label>
-                    <p class="text-white"></p>
-                </div>
-            </div>
+    <!-- Time Zone -->
+    <div class="mb-4">
+        <label class="block font-medium text-white">Time Zone:</label>
+        <p id="timezone_display" class="text-white">{{ timezone or 'Not set' }}</p>
+        <input name="timezone" value="{{ timezone or '' }}"
+               class="w-full p-2 rounded bg-gray-700 text-white hidden editable" />
+    </div>
 
-            <!-- Last Synced Info -->
-            <div class="bg-dark dark:bg-gray-800 p-4 rounded-2xl shadow">
-                <h2 class="text-xl font-semibold mb-4">🔄 Last Synced</h2>
-                <p class="text-white">
-                    Last synced: 
-                </p>
-                <a href="/sync" class="inline-block mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">Refresh My Stats</a>
-            </div>
+    <!-- Save & Cancel Buttons -->
+    <div class="flex justify-between mt-6 hidden editable" id="action-buttons">
+        <div>
+            <button type="submit" class="bg-green-600 hover:bg-green-700 text-dark px-4 py-2 rounded mr-2">Save Settings</button>
+            <button type="button" onclick="cancelEdit()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">Cancel</button>
         </div>
-    {% else %}
+        <a href="/disconnect" class="text-red-600 hover:underline self-center">Disconnect Spotify</a>
+    </div>
+</form>
+<script>
+    function toggleEdit() {
+        document.querySelectorAll('.editable').forEach(el => el.classList.remove('hidden'));
+        document.querySelectorAll('#settings-form p').forEach(el => el.classList.add('hidden'));
+    }
 
-            user should be redirected to login page
+    function cancelEdit() {
+        document.querySelectorAll('.editable').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('#settings-form p').forEach(el => el.classList.remove('hidden'));
 
-        {% endif %}
+        // Optionally, reset values (if they were changed) — refreshes the page
+        // location.reload();
+    }
+</script>
+
 
 {% endblock %}
