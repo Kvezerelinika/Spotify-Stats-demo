@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, TIMESTAMP, ForeignKey, Boolean, Date, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, TIMESTAMP, ForeignKey, Boolean, Date, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import Session
@@ -45,6 +45,10 @@ class User(Base):
     access_token = Column(String, nullable=True)  # Access token for Spotify API
     refresh_token = Column(String, nullable=True)  # Refresh token for Spotify API
     token_expires = Column(DateTime(timezone=True))  # Expiration time for the access token
+    custom_username = Column(String)
+    bio = Column(Text)
+    preferred_language = Column(String)
+    timezone = Column(String)
 
 
     # Add relationships if necessary (e.g., with listening_history, top_artists, etc.)

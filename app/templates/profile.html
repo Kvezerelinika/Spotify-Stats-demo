@@ -5,74 +5,121 @@
 {% endblock %}
 
 {% block main %}
+<div class="profile-image">
+    <img src="{{ user_image }}" alt="Profile Image" class="profile-img">
+</div>
 
-    <div class="profile-page-container">
-        <img src="{{ user_image }}" alt="Profile Image" class="profile-img">
+<div class="profile-info bg-black p-6 rounded-2xl shadow-md border-2 border-indigo-400/70 hover:shadow-indigo-500/50 transition-shadow duration-300 max-w-3xl mx-auto">
+  <form method="POST" action="/update_settings" id="settings-form" class="space-y-6">
+
+    <!-- Grid container for 2x2 layout -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <!-- Custom Username -->
+        <div>
+            <label class="block font-medium text-white">Custom Username:</label>
+            <div class="flex justify-between items-center">
+                <p class="text-white" id="custom_username_display">{{ custom_username or 'Not set' }}</p>
+                <button type="button" onclick="toggleFieldEdit('custom_username')" class="text-blue-400 hover:text-blue-600">✏️</button>
+            </div>
+            <input type="text" name="custom_username" value="{{ custom_username or '' }}"
+                class="w-full p-2 rounded bg-gray-700 text-dark hidden" id="custom_username_input" />
+        </div>
+
+        <!-- Profile Bio -->
+        <div>
+            <label class="block font-medium text-white">Profile Bio:</label>
+            <div class="flex justify-between items-center">
+                <p class="text-white" id="bio_display">{{ bio or 'Not set' }}</p>
+                <button type="button" onclick="toggleFieldEdit('bio')" class="text-blue-400 hover:text-blue-600">✏️</button>
+            </div>
+            <textarea name="bio" id="bio_input"
+                class="w-full p-2 rounded bg-gray-700 text-dark hidden">{{ bio or '' }}</textarea>
+        </div>
+
+        <!-- Language -->
+        <div>
+            <label class="block font-medium text-white">Language:</label>
+            <div class="flex justify-between items-center">
+                <p class="text-white" id="language_display">{{ language or 'Not set' }}</p>
+                <button type="button" onclick="toggleFieldEdit('language')" class="text-blue-400 hover:text-blue-600">✏️</button>
+            </div>
+            <select name="language" id="language_input"
+                class="w-full p-2 rounded bg-gray-700 text-dark hidden">
+                <option value="">Select Language</option>
+                <option value="en" {% if language == 'en' %}selected{% endif %}>English</option>
+                <option value="ka" {% if language == 'ka' %}selected{% endif %}>Georgian</option>
+                <option value="ru" {% if language == 'ru' %}selected{% endif %}>Russian</option>
+                <option value="de" {% if language == 'de' %}selected{% endif %}>German</option>
+                <option value="fr" {% if language == 'fr' %}selected{% endif %}>French</option>
+            </select>
+        </div>
+
+        <!-- Time Zone -->
+        <div>
+            <label class="block font-medium text-white">Time Zone:</label>
+            <div class="flex justify-between items-center">
+                <p class="text-white" id="timezone_display">{{ timezone or 'Not set' }}</p>
+                <button type="button" onclick="toggleFieldEdit('timezone')" class="text-blue-400 hover:text-blue-600">✏️</button>
+            </div>
+            <select name="timezone" id="timezone_input"
+                class="w-full p-2 rounded bg-gray-700 text-dark hidden">
+                <option value="">Select Timezone</option>
+                <option value="Asia/Tbilisi" {% if timezone == 'Asia/Tbilisi' %}selected{% endif %}>Asia/Tbilisi (UTC+4)</option>
+                <option value="Europe/Berlin" {% if timezone == 'Europe/Berlin' %}selected{% endif %}>Europe/Berlin (UTC+1)</option>
+                <option value="UTC" {% if timezone == 'UTC' %}selected{% endif %}>UTC (Universal)</option>
+                <option value="America/New_York" {% if timezone == 'America/New_York' %}selected{% endif %}>America/New_York (UTC-5)</option>
+                <option value="Asia/Dubai" {% if timezone == 'Asia/Dubai' %}selected{% endif %}>Asia/Dubai (UTC+4)</option>
+            </select>
+        </div>
     </div>
-
-
-    <form method="POST" action="/update_settings" id="settings-form">
-    <!-- Edit Button -->
-    <div class="flex justify-end mb-4">
-        <button type="button" onclick="toggleEdit()" class="text-blue-400 hover:text-blue-600">
-            ✏️ Edit
+    <!-- Save and Cancel Buttons -->
+    <div id="action-buttons" class="flex justify-end gap-4 mt-4 hidden">
+        <button type="submit"
+            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow">
+            Save
+        </button>
+        <button type="button" onclick="cancelEdit()"
+            class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow">
+            Cancel
         </button>
     </div>
 
-    <!-- Custom Username -->
-    <div class="mb-4">
-        <label class="block font-medium text-white">Custom Username:</label>
-        <p id="custom_username_display" class="text-white">{{ custom_username or 'Not set' }}</p>
-        <input type="text" name="custom_username" value="{{ custom_username or '' }}"
-               class="w-full p-2 rounded bg-gray-700 text-white hidden editable" />
-    </div>
+  </form>
+</div>
 
-    <!-- Profile Bio -->
-    <div class="mb-4">
-        <label class="block font-medium text-white">Profile Bio:</label>
-        <p id="bio_display" class="text-white">{{ bio or 'Not set' }}</p>
-        <textarea name="bio" class="w-full p-2 rounded bg-gray-700 text-white hidden editable">{{ bio or '' }}</textarea>
-    </div>
 
-    <!-- Language -->
-    <div class="mb-4">
-        <label class="block font-medium text-white">Language:</label>
-        <p id="language_display" class="text-white">{{ language or 'Not set' }}</p>
-        <input name="language" value="{{ language or '' }}"
-               class="w-full p-2 rounded bg-gray-700 text-white hidden editable" />
-    </div>
-
-    <!-- Time Zone -->
-    <div class="mb-4">
-        <label class="block font-medium text-white">Time Zone:</label>
-        <p id="timezone_display" class="text-white">{{ timezone or 'Not set' }}</p>
-        <input name="timezone" value="{{ timezone or '' }}"
-               class="w-full p-2 rounded bg-gray-700 text-white hidden editable" />
-    </div>
-
-    <!-- Save & Cancel Buttons -->
-    <div class="flex justify-between mt-6 hidden editable" id="action-buttons">
-        <div>
-            <button type="submit" class="bg-green-600 hover:bg-green-700 text-dark px-4 py-2 rounded mr-2">Save Settings</button>
-            <button type="button" onclick="cancelEdit()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">Cancel</button>
-        </div>
-        <a href="/disconnect" class="text-red-600 hover:underline self-center">Disconnect Spotify</a>
-    </div>
-</form>
 <script>
-    function toggleEdit() {
-        document.querySelectorAll('.editable').forEach(el => el.classList.remove('hidden'));
-        document.querySelectorAll('#settings-form p').forEach(el => el.classList.add('hidden'));
+function toggleFieldEdit(field) {
+    const display = document.getElementById(`${field}_display`);
+    const input = document.getElementById(`${field}_input`);
+    const actionButtons = document.getElementById("action-buttons");
+
+    if (display && input) {
+        display.classList.add("hidden");
+        input.classList.remove("hidden");
     }
 
-    function cancelEdit() {
-        document.querySelectorAll('.editable').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('#settings-form p').forEach(el => el.classList.remove('hidden'));
-
-        // Optionally, reset values (if they were changed) — refreshes the page
-        // location.reload();
+    if (actionButtons) {
+        actionButtons.classList.remove("hidden");
     }
+}
+
+function cancelEdit() {
+    const fields = ["custom_username", "bio", "language", "timezone"];
+    fields.forEach(field => {
+        const display = document.getElementById(`${field}_display`);
+        const input = document.getElementById(`${field}_input`);
+        if (display && input) {
+            display.classList.remove("hidden");
+            input.classList.add("hidden");
+        }
+    });
+
+    const actionButtons = document.getElementById("action-buttons");
+    if (actionButtons) {
+        actionButtons.classList.add("hidden");
+    }
+}
 </script>
-
 
 {% endblock %}

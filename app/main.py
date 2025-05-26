@@ -289,8 +289,13 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
 
     return templates.TemplateResponse("dashboard.html", context)
 
-from sqlalchemy import select
+
 from app.db import User  # Assuming User is a SQLAlchemy model
+
+from fastapi import Form
+from sqlalchemy import update, select
+from starlette.responses import RedirectResponse
+from datetime import datetime
 
 @app.get("/profile")
 async def profile(request: Request):
@@ -298,31 +303,44 @@ async def profile(request: Request):
     client_data = SpotifyClient(access_token)
 
     user_image, user_name = None, "Guest"
+    user_info_dict = {}
+    user_id = None
 
     if access_token:
         db = await get_db_connection()
 
-        # Get the user profile from Spotify
+        # Get user info from Spotify and update DB
         user_profile = await client_data.get_spotify_user_profile()
         spotify_user = SpotifyUser(access_token)
         user_data = await spotify_user.store_user_info_to_database(user_profile, db)
         user_id = user_data["id"]
 
-        stmt = select(User.user_id, User.image_url, User.display_name).where(User.user_id == user_id)
+        # Get additional user settings from DB
+        stmt = select(
+            User.user_id,
+            User.image_url,
+            User.display_name,
+            User.custom_username,
+            User.bio,
+            User.preferred_language,
+            User.timezone
+        ).where(User.user_id == user_id)
+
         result = await db.execute(stmt)
         user_info = result.one_or_none()
 
         if user_info:
             user_info_dict = dict(user_info._mapping)
-            user_image = user_info_dict["image_url"]       
+            user_image = user_info_dict["image_url"]
             user_name = user_info_dict["display_name"]
-            user_id = user_info_dict["user_id"]  
         else:
-            user_image, user_name, user_id = None, "Unknown User"
+            user_name = "Unknown User"
+
+        # Save user_id to session for reuse
+        request.session["spotify_user_id"] = user_id
 
         await db.close()
 
-        # Final check: if somehow no user_name
     if not access_token or not user_id or user_name == "Guest":
         return RedirectResponse(url="/login", status_code=302)
 
@@ -330,8 +348,45 @@ async def profile(request: Request):
         "request": request,
         "user_image": user_image,
         "user_name": user_name,
-        "user_id": user_id
+        "user_id": user_id,
+        "custom_username": user_info_dict.get("custom_username", ""),
+        "bio": user_info_dict.get("bio", ""),
+        "language": user_info_dict.get("preferred_language", ""),
+        "timezone": user_info_dict.get("timezone", "")
     })
+
+
+@app.post("/update_settings")
+async def update_settings(
+    request: Request,
+    custom_username: str = Form(...),
+    bio: str = Form(...),
+    language: str = Form(...),
+    timezone: str = Form(...)
+):
+    user_id = request.session.get("spotify_user_id")
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=302)
+
+    db = await get_db_connection()
+
+    stmt = (
+        update(User)
+        .where(User.user_id == user_id)
+        .values(
+            custom_username=custom_username.strip() or None,
+            bio=bio.strip() or None,
+            preferred_language=language.strip() or None,
+            timezone=timezone.strip() or None,
+            last_updated=datetime.utcnow()
+        )
+    )
+
+    await db.execute(stmt)
+    await db.commit()
+    await db.close()
+
+    return RedirectResponse(url="/profile", status_code=303)
 
 
 

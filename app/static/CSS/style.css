@@ -448,7 +448,7 @@ button#more-btn:hover {
 }
 
 
-.profile-page-container {
+.profile-image {
     display: flex;
     flex-direction: column;
     align-items: flex-start; /* Corrected from 'left' */
@@ -456,7 +456,7 @@ button#more-btn:hover {
     margin-bottom: 1px;
 }
 
-.profile-page-container img {
+.profile-image img {
     margin-bottom: 0px;
     width: 150px;
     height: 150px;
@@ -464,4 +464,32 @@ button#more-btn:hover {
     object-position: top;
     border-radius: 50%;
     border: 5px solid rgb(0, 0, 0);
+}
+
+.profile-info {
+  padding: 1.5rem; /* Tailwind's p-6 */
+  border-radius: 1rem; /* Tailwind's rounded-2xl */
+  border: 2px solid #3b82f6; /* Tailwind's border-blue-400 */
+  background-color: black;
+  box-shadow: 0 0 15px #3b82f6;
+}
+
+.profile-info:hover {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.8);
+}
+
+@keyframes glow {
+  0% {
+    box-shadow: 0 0 5px #3b82f6, 0 0 10px #3b82f6;
+  }
+  50% {
+    box-shadow: 0 0 20px #3b82f6, 0 0 30px #3b82f6;
+  }
+  100% {
+    box-shadow: 0 0 5px #3b82f6, 0 0 10px #3b82f6;
+  }
+}
+
+.glowing-border {
+  animation: glow 2s infinite ease-in-out;
 }
