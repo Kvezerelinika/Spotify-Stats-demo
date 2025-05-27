@@ -45,7 +45,7 @@ class User(Base):
     access_token = Column(String, nullable=True)  # Access token for Spotify API
     refresh_token = Column(String, nullable=True)  # Refresh token for Spotify API
     token_expires = Column(DateTime(timezone=True))  # Expiration time for the access token
-    custom_username = Column(String)
+    custom_username = Column(String, unique=True, nullable=True)
     bio = Column(Text)
     preferred_language = Column(String)
     timezone = Column(String)

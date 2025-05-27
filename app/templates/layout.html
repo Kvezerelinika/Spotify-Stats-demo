@@ -40,7 +40,11 @@
                 <h5 class="d-inline ms-2">{{ user_name }}</h5>
             </a>
             <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                    {% if current_path == '/profile' %}
+                <li><a class="dropdown-item" href="/dashboard">Dashboard</a></li>
+                    {% else %}
                 <li><a class="dropdown-item" href="/profile">Profile</a></li>
+                    {% endif %}
                 <li><a class="dropdown-item" href="/logout">Logout</a></li>
             </ul>
         </div>

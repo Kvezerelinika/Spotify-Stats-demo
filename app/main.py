@@ -1,23 +1,27 @@
-from fastapi import FastAPI, Request, Query, HTTPException, UploadFile, File, APIRouter, Depends
+from fastapi import FastAPI, Request, Query, HTTPException, UploadFile, File, APIRouter, Depends, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
 import time, asyncio, zipfile, json, logging, traceback
 from io import BytesIO
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta, timezone
+from sqlalchemy import update, select
+
 
 # Import Spotify helper functions
 from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
 from app.spotify_api import SpotifyClient
 from app.database import get_db_connection, AsyncSessionLocal
 from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
+from app.db import User
 
 # Function to fetch user data from Spotify
-import time
 import httpx
+
 
 settings = OAuthSettings()
 spotify_oauth = SpotifyOAuth(settings)
@@ -290,14 +294,8 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
     return templates.TemplateResponse("dashboard.html", context)
 
 
-from app.db import User  # Assuming User is a SQLAlchemy model
 
-from fastapi import Form
-from sqlalchemy import update, select
-from starlette.responses import RedirectResponse
-from datetime import datetime
-
-@app.get("/profile")
+@app.get("/profile", response_class=HTMLResponse)
 async def profile(request: Request):
     access_token = request.session.get("spotify_token")
     client_data = SpotifyClient(access_token)
@@ -336,7 +334,7 @@ async def profile(request: Request):
         else:
             user_name = "Unknown User"
 
-        # Save user_id to session for reuse
+        # Save user_id to session
         request.session["spotify_user_id"] = user_id
 
         await db.close()
@@ -346,6 +344,7 @@ async def profile(request: Request):
 
     return templates.TemplateResponse("profile.html", {
         "request": request,
+        "current_path": request.url.path,  # ✅ Add this line
         "user_image": user_image,
         "user_name": user_name,
         "user_id": user_id,
@@ -354,6 +353,7 @@ async def profile(request: Request):
         "language": user_info_dict.get("preferred_language", ""),
         "timezone": user_info_dict.get("timezone", "")
     })
+
 
 
 @app.post("/update_settings")
