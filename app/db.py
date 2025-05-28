@@ -78,6 +78,7 @@ class Track(Base):
     album_release_date = Column(Date, nullable=True)  # Album release date
     album_image_url = Column(String(255), nullable=True)  # URL of the album image
     album_name = Column(String(255), nullable=True)  # Name of the album
+    
 
 
     # Relationships

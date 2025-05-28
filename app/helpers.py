@@ -445,16 +445,16 @@ class MusicDataService:
     #Calculate the average release date of albums from tracks the user has listened to.
     async def get_average_release_date(self):
         query = text("""
-            SELECT AVG(EXTRACT(EPOCH FROM t.release_date)) AS average_release_date
+            SELECT AVG(EXTRACT(EPOCH FROM t.album_release_date)) AS average_release_date
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
-            WHERE lh.user_id = :user_id AND t.release_date IS NOT NULL;
+            WHERE lh.user_id = :user_id AND t.album_release_date IS NOT NULL;
         """)
         result = await self.db.execute(query, {"user_id": self.user_id})
         row = result.fetchone()
         
         if row and row[0]:
-            return datetime.fromtimestamp(row[0])
+            return datetime.fromtimestamp(float(row[0]))
         return None
 
 
