@@ -55,6 +55,12 @@ class User(Base):
     listening_history = relationship("ListeningHistory", back_populates="users")
     users_top_artists = relationship("UsersTopArtists", back_populates="users")
     users_top_tracks = relationship("UsersTopTracks", back_populates="users")
+    followed_artists = relationship("UserFollowedArtist", back_populates="user")
+    payment_methods = relationship("PaymentMethod", back_populates="user")
+    sent_messages = relationship("Message", back_populates="sender", foreign_keys='Message.sender_id', cascade="all, delete-orphan")
+    received_messages = relationship("Message", back_populates="receiver", foreign_keys='Message.receiver_id', cascade="all, delete-orphan")
+
+
 
 class Track(Base):
     __tablename__ = "tracks"
@@ -80,6 +86,8 @@ class Track(Base):
     users_top_tracks = relationship("UsersTopTracks", back_populates="tracks")  # Relationship with UsersTopTracks
     track_artists = relationship("TrackArtist", back_populates="tracks")  # Relationship with TrackArtist (many-to-many with Artist)
     primary_artist = relationship("Artist", foreign_keys=[artist_id]) # Relationship with primary artist (if needed, otherwise can be removed)
+    global_stats = relationship("GlobalTrackStats", back_populates="track", uselist=False)
+
 
 
 
@@ -100,6 +108,9 @@ class Artist(Base):
     track_artists = relationship("TrackArtist", back_populates="artists")     # Relationship with track_artists (many-to-many with Track)
     users_top_artists = relationship("UsersTopArtists", back_populates="artists")     # Relationship with users_top_artists (many-to-many with User)
     tracks = relationship("Track", back_populates="primary_artist", foreign_keys="[Track.artist_id]") # Relationship with Tracks (if needed, otherwise can be removed)
+    global_stats = relationship("GlobalArtistStats", back_populates="artist", uselist=False)
+    followers = relationship("UserFollowedArtist", back_populates="artist")
+
 
 
 class Album(Base):
@@ -156,3 +167,69 @@ class TrackArtist(Base):
     
     tracks = relationship('Track', back_populates='track_artists')
     artists = relationship('Artist', back_populates='track_artists')
+
+
+class UserConnection(Base):
+    __tablename__ = "user_connections"
+    user_id = Column(String, ForeignKey("users.user_id"), primary_key=True)
+    friend_id = Column(String, ForeignKey("users.user_id"), primary_key=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+    friend = relationship("User", foreign_keys=[friend_id])
+
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sender_id = Column(String, ForeignKey("users.user_id"), nullable=False)
+    receiver_id = Column(String, ForeignKey("users.user_id"), nullable=False)
+    content = Column(Text, nullable=False)
+    timestamp = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    is_read = Column(Boolean, default=False)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])
+    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
+    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+
+
+
+class GlobalArtistStats(Base):
+    __tablename__ = "global_artist_stats"
+    artist_id = Column(String, ForeignKey("artists.artist_id"), primary_key=True)
+    total_plays = Column(Integer, default=0)
+    unique_users = Column(Integer, default=0)
+
+    artist = relationship("Artist", back_populates="global_stats")
+
+
+class GlobalTrackStats(Base):
+    __tablename__ = "global_track_stats"
+    track_id = Column(String, ForeignKey("tracks.track_id"), primary_key=True)
+    total_plays = Column(Integer, default=0)
+    unique_users = Column(Integer, default=0)
+
+    track = relationship("Track", back_populates="global_stats")
+
+
+class UserFollowedArtist(Base):
+    __tablename__ = "user_followed_artists"
+    user_id = Column(String, ForeignKey("users.user_id"), primary_key=True)
+    artist_id = Column(String, ForeignKey("artists.artist_id"), primary_key=True)
+    followed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="followed_artists")
+    artist = relationship("Artist", back_populates="followers")
+
+
+class PaymentMethod(Base):
+    __tablename__ = "payment_methods"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)
+    card_last4 = Column(String(4), nullable=False)
+    card_brand = Column(String(50))
+    expiration_date = Column(String(10))  # e.g., MM/YY
+    is_active = Column(Boolean, default=True)
+    added_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="payment_methods")

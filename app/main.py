@@ -252,6 +252,21 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         top_genres = await user_service.get_top_genres()
         records_by_time = await user_service.complete_listening_history(limit, offset)
 
+
+        #TESTING 
+        print("TESTING:")
+        days_listened = await user_service.get_consecutive_days_listened() #passed
+        print(f"Consecutive days listened: {days_listened}")
+        biggest_streak_one_song = await user_service.get_most_listened_song_streak() #passed
+        print(f"Biggest streak for one song: {biggest_streak_one_song}")
+        streak_inbetween_song = await user_service.get_streak_of_song_played_inbetween() #passed
+        print(f"Streak of song played inbetween: {streak_inbetween_song}")
+        average_song_popularity = await user_service.get_average_popularity() #passed
+        print(f"Average song popularity: {average_song_popularity}")
+        average_album_release_date = await user_service.get_average_release_date() #passed
+        print(f"Average album release date: {average_album_release_date}")
+
+
         spotify_client = SpotifyClient(token)
         playing_now_data = await spotify_client.get_now_playing() or {
             "track_name": "N/A",

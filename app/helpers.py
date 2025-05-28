@@ -2,12 +2,17 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from collections import Counter
-from sqlalchemy import text, select
+from sqlalchemy import text, select, bindparam
 
 from app.spotify_api import SpotifyClient
 from app.crud import SpotifyDataSaver
 from app.database import get_db_connection
 from app.db import User
+
+
+from collections import defaultdict
+from datetime import timedelta
+from sqlalchemy import text
 
 import pytz, logging
 
@@ -214,6 +219,263 @@ class MusicDataService:
 
         return genres_count.most_common(5)
     
+    #Calculate the number of consecutive days a user has listened to any track.
+    async def get_consecutive_days_listened(self):
+        query = text("""
+            SELECT DISTINCT DATE(played_at) AS play_date
+            FROM listening_history
+            WHERE user_id = :user_id
+            ORDER BY play_date DESC;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.scalars().all()
+
+        if not rows:
+            return 0
+
+        consecutive_days = 1
+        last_date = rows[0]
+
+        for current_date in rows[1:]:
+            if (last_date - current_date).days == 1:
+                consecutive_days += 1
+            else:
+                break
+            last_date = current_date
+
+        return consecutive_days
+    
+    #Calculate the streak of the one song a user has listened to the most.
+    async def get_most_listened_song_streak(self):
+        # Get the full listening history grouped by date
+        query = text("""
+            SELECT DATE(lh.played_at) as play_date, t.name, t.artist_name
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id
+            ORDER BY play_date
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        rows = result.fetchall()
+
+        if not rows:
+            return None
+
+        # Group songs by date
+        daily_songs = defaultdict(set)
+        for row in rows:
+            play_date = row[0]
+            song_name = row[1]
+            artist_name = row[2]
+            daily_songs[play_date].add((song_name, artist_name))
+
+        # Iterate through sorted dates and track streaks
+        sorted_dates = sorted(daily_songs.keys())
+        max_streak = 0
+        current_streak = 0
+        last_date = None
+        last_song = None
+        streak_dates = []
+
+        for date in sorted_dates:
+            songs_today = daily_songs[date]
+
+            if len(songs_today) == 1:
+                song = list(songs_today)[0]
+
+                if last_date and date == last_date + timedelta(days=1) and song == last_song:
+                    current_streak += 1
+                    streak_dates.append(date)
+                else:
+                    current_streak = 1
+                    streak_dates = [date]
+
+                last_date = date
+                last_song = song
+
+                if current_streak > max_streak:
+                    max_streak = current_streak
+                    best_streak_song = song
+                    best_streak_dates = list(streak_dates)
+            else:
+                current_streak = 0
+                streak_dates = []
+                last_date = None
+                last_song = None
+
+        if max_streak == 0:
+            return None
+
+        # Count total streams of the song during the streak
+        song_name, artist_name = best_streak_song
+        stream_count_query = text("""
+            SELECT COUNT(*) 
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id
+            AND t.name = :song_name
+            AND t.artist_name = :artist_name
+            AND DATE(played_at) IN :streak_dates
+        """).bindparams(bindparam("streak_dates", expanding=True))
+
+        result = await self.db.execute(stream_count_query, {
+            "user_id": self.user_id,
+            "song_name": song_name,
+            "artist_name": artist_name,
+            "streak_dates": best_streak_dates
+        })
+        stream_count = result.scalar()
+
+        return {
+            "song": song_name,
+            "artist": artist_name,
+            "streak_days": max_streak,
+            "streams_in_streak": stream_count
+        }
+
+
+    #Calculate sogn that was on streak every day with other songs playing in between
+    async def get_streak_of_song_played_inbetween(self):
+        query = text("""
+            SELECT t.name, t.artist_name, COUNT(*) AS play_count
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id
+            GROUP BY t.name, t.artist_name
+            ORDER BY play_count DESC
+            LIMIT 1;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        row = result.fetchone()
+        
+        if not row:
+            return None
+
+        song_name = row[0]
+        artist_name = row[1]
+
+        # Get play dates (descending)
+        streak_query = text("""
+            SELECT DISTINCT DATE(played_at) AS play_date
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id AND t.name = :song_name AND t.artist_name = :artist_name
+            ORDER BY play_date DESC;
+        """)
+        
+        result = await self.db.execute(streak_query, {
+            "user_id": self.user_id,
+            "song_name": song_name,
+            "artist_name": artist_name
+        })
+        
+        rows = result.fetchall()
+        if not rows:
+            return None
+
+        # Calculate the consecutive streak and collect the dates
+        consecutive_days = 1
+        streak_dates = [rows[0][0]]
+        last_date = rows[0][0]
+
+        for row in rows[1:]:
+            current_date = row[0]
+            if (last_date - current_date).days == 1:
+                consecutive_days += 1
+                streak_dates.append(current_date)
+            else:
+                break
+            last_date = current_date
+
+        # Count how many times the song was played during those streak days
+        stream_count_query = text("""
+            SELECT COUNT(*) 
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id
+            AND t.name = :song_name
+            AND t.artist_name = :artist_name
+            AND DATE(played_at) = ANY(:streak_dates);
+        """)
+
+        # SQLAlchemy can't bind an array of dates directly with `ANY()` unless formatted correctly
+        # Workaround: use `IN (...)` with expanding bind
+        stream_count_query = text("""
+            SELECT COUNT(*) 
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id
+            AND t.name = :song_name
+            AND t.artist_name = :artist_name
+            AND DATE(played_at) IN :streak_dates;
+        """).bindparams(
+            bindparam("streak_dates", expanding=True)
+        )
+
+        result = await self.db.execute(stream_count_query, {
+            "user_id": self.user_id,
+            "song_name": song_name,
+            "artist_name": artist_name,
+            "streak_dates": streak_dates
+        })
+        stream_count = result.scalar()
+
+        return {
+            "song": song_name,
+            "artist": artist_name,
+            "streak_days": consecutive_days,
+            "streams_in_streak": stream_count
+        }
+
+
+
+    #Compute the average popularity score of songs a user has listened to.
+    async def get_average_popularity(self):
+        query = text("""
+            SELECT AVG(t.popularity) AS average_popularity
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        row = result.fetchone()
+        return row[0] if row else 0
+
+
+    #Calculate the average release date of albums from tracks the user has listened to.
+    async def get_average_release_date(self):
+        query = text("""
+            SELECT AVG(EXTRACT(EPOCH FROM t.release_date)) AS average_release_date
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id AND t.release_date IS NOT NULL;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        row = result.fetchone()
+        
+        if row and row[0]:
+            return datetime.fromtimestamp(row[0])
+        return None
+
+
+    #Visualize which days the user listened to music (calendar heatmap or timeline).
+
+
+    #Show global popularity of an artist/track based on all users’ listening history.
+
+
+    #Show how many songs a user listened to from each artist, and how often.
+
+
+    #Display distinct genres a user has listened to.
+
+
+    #Allow users to follow each other, view comparisons, and generate social listening insights.
+
+
+    #Enable users to send and receive private messages.
+    
+
 
 class TokenRefresh:
     def __init__(self, db):
