@@ -427,8 +427,6 @@ class MusicDataService:
             "streams_in_streak": stream_count
         }
 
-
-
     #Compute the average popularity score of songs a user has listened to.
     async def get_average_popularity(self):
         query = text("""
@@ -440,7 +438,6 @@ class MusicDataService:
         result = await self.db.execute(query, {"user_id": self.user_id})
         row = result.fetchone()
         return row[0] if row else 0
-
 
     #Calculate the average release date of albums from tracks the user has listened to.
     async def get_average_release_date(self):
@@ -457,23 +454,79 @@ class MusicDataService:
             return datetime.fromtimestamp(float(row[0]))
         return None
 
-
-    #Visualize which days the user listened to music (calendar heatmap or timeline).
-
-
     #Show global popularity of an artist/track based on all users’ listening history.
+    async def get_top_artists(self, limit=10):
+        query = text("""
+            SELECT 
+                a.artist_id,
+                a.name,
+                COUNT(*) AS total_streams
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            JOIN artists a ON t.artist_id = a.artist_id
+            GROUP BY a.artist_id, a.name
+            ORDER BY total_streams DESC
+            LIMIT :limit;
+        """)
+        result = await self.db.execute(query, {"limit": limit})
+        return [dict(row._mapping) for row in result.fetchall()]
+
+    async def get_top_tracks(self, limit=10):
+        query = text("""
+            SELECT 
+                t.track_id,
+                t.name,
+                COUNT(*) AS total_streams
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            GROUP BY t.track_id, t.name
+            ORDER BY total_streams DESC
+            LIMIT :limit;
+        """)
+        result = await self.db.execute(query, {"limit": limit})
+        return [dict(row._mapping) for row in result.fetchall()]
 
 
     #Show how many songs a user listened to from each artist, and how often.
+    async def get_user_artist_stats(self, user_id: int):
+        query = text("""
+            SELECT 
+                t.artist_id,
+                a.name AS artist_name,
+                COUNT(*) AS total_streams,
+                COUNT(DISTINCT t.track_id) AS distinct_tracks_listened
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            JOIN artists a ON t.artist_id = a.artist_id
+            WHERE lh.user_id = :user_id
+            GROUP BY t.artist_id, a.name
+            ORDER BY total_streams DESC;
+        """)
+        result = await self.db.execute(query, {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
 
 
     #Display distinct genres a user has listened to.
-
+    async def get_user_genre_stats(self, user_id: int):
+        query = text("""
+            SELECT 
+                a.genres AS genre,
+                COUNT(*) AS total_streams
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            JOIN artists a ON t.artist_id = a.artist_id
+            WHERE lh.user_id = :user_id AND a.genres IS NOT NULL
+            GROUP BY a.genres
+            ORDER BY total_streams DESC;
+        """)
+        result = await self.db.execute(query, {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
 
     #Allow users to follow each other, view comparisons, and generate social listening insights.
 
-
     #Enable users to send and receive private messages.
+
+    #Visualize which days the user listened to music (calendar heatmap or timeline).
     
 
 

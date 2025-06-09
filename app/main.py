@@ -265,6 +265,37 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         print(f"Average song popularity: {average_song_popularity}")
         average_album_release_date = await user_service.get_average_release_date() #passed
         print(f"Average album release date: {average_album_release_date}")
+        # Inside your async test block
+        async with AsyncSessionLocal() as session:
+            stats = MusicDataService(user_id, session)
+
+            top_tracks = await stats.get_top_tracks(limit=5)
+            print("Top Tracks:")
+            for i, track in enumerate(top_tracks, start=1):
+                print(f"{i}. {track['name']} - {track['total_streams']} streams")
+
+            top_artists = await stats.get_top_artists(limit=5)
+            print("Top Artists:")
+            for i, artist in enumerate(top_artists, start=1):
+                print(f"{i}. {artist['name']} - {artist['total_streams']} streams")
+        user_to_artist = await user_service.get_user_artist_stats(user_id)
+        print("User to Artist Stats:")
+        for row in user_to_artist:
+            artist_id = row["artist_id"]
+            artist_name = row["artist_name"]
+            total_streams = row["total_streams"]
+            distinct_tracks_listened = row["distinct_tracks_listened"]
+            print(f"Artist ID: {artist_id}, Artist Name: {artist_name}, Streams: {total_streams}, Distinct Tracks: {distinct_tracks_listened}")
+        distinctive_genres_per_user = await user_service.get_user_genre_stats(user_id)
+        print("Distinctive Genres per User:")
+        for row in distinctive_genres_per_user:
+            genre = row["genre"]
+            total_streams = row["total_streams"]
+            print(f"Genre: {genre}, Streams: {total_streams}")
+
+
+
+
 
 
         spotify_client = SpotifyClient(token)
