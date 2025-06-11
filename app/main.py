@@ -265,27 +265,36 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
         print(f"Average song popularity: {average_song_popularity}")
         average_album_release_date = await user_service.get_average_release_date() #passed
         print(f"Average album release date: {average_album_release_date}")
-        # Inside your async test block
+
+        # top artists and top tracks from local database per user
         async with AsyncSessionLocal() as session:
             stats = MusicDataService(user_id, session)
 
-            top_tracks = await stats.get_top_tracks(limit=5)
+            top_tracks = await stats.get_top_tracks(limit=50)
             print("Top Tracks:")
             for i, track in enumerate(top_tracks, start=1):
                 print(f"{i}. {track['name']} - {track['total_streams']} streams")
 
-            top_artists = await stats.get_top_artists(limit=5)
+            top_artists = await stats.get_top_artists(limit=50)
             print("Top Artists:")
             for i, artist in enumerate(top_artists, start=1):
                 print(f"{i}. {artist['name']} - {artist['total_streams']} streams")
+
+        # Fetch user to artist stats // artist, number of streams, distinct tracks listened, total duration 
         user_to_artist = await user_service.get_user_artist_stats(user_id)
         print("User to Artist Stats:")
         for row in user_to_artist:
             artist_id = row["artist_id"]
             artist_name = row["artist_name"]
+            total_duration = row["total_duration_ms"]
             total_streams = row["total_streams"]
             distinct_tracks_listened = row["distinct_tracks_listened"]
-            print(f"Artist ID: {artist_id}, Artist Name: {artist_name}, Streams: {total_streams}, Distinct Tracks: {distinct_tracks_listened}")
+            total_seconds = total_duration // 1000 if total_duration else 0
+            formatted_duration = str(timedelta(seconds=total_seconds))
+            print(f"Artist ID: {artist_id}, Artist Name: {artist_name}, Streams: {total_streams}, "
+                f"Distinct Tracks: {distinct_tracks_listened}, Total Duration: {formatted_duration}")
+        
+        #streams per distinctive genres per user 
         distinctive_genres_per_user = await user_service.get_user_genre_stats(user_id)
         print("Distinctive Genres per User:")
         for row in distinctive_genres_per_user:
@@ -293,6 +302,17 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
             total_streams = row["total_streams"]
             print(f"Genre: {genre}, Streams: {total_streams}")
 
+        #monthly stats
+        monthly_stats = await user_service.get_monthly_stats(user_id)
+        print("Monthly Stats:")
+        for stats in monthly_stats:
+            month = stats["month"]
+            total_songs_listened = stats["total_songs_listened"]
+            total_duration_minutes = stats["total_duration_minutes"]
+            total_duration_hours = stats["total_duration_hours"]
+            print(f"Month: {month}, total_songs_listened: {total_songs_listened}, "
+                  f"total_duration_minutes: {total_duration_minutes} minutes, "
+                  f"total_duration_hours: {total_duration_hours} hours")
 
 
 

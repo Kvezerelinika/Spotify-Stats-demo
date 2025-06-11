@@ -494,6 +494,7 @@ class MusicDataService:
                 t.artist_id,
                 a.name AS artist_name,
                 COUNT(*) AS total_streams,
+                SUM(t.duration_ms) AS total_duration_ms,
                 COUNT(DISTINCT t.track_id) AS distinct_tracks_listened
             FROM listening_history lh
             JOIN tracks t ON lh.track_id = t.track_id
@@ -521,6 +522,34 @@ class MusicDataService:
         """)
         result = await self.db.execute(query, {"user_id": user_id})
         return [dict(row._mapping) for row in result.fetchall()]
+    
+    #SONGs LISTENED BY MONTH and MIN/HOURS LISTENED BY MONTH
+    async def get_monthly_stats(self, user_id: int):
+        query = text("""
+            SELECT 
+                DATE_TRUNC('month', lh.played_at) AS month,
+                COUNT(*) AS total_songs_listened,
+                SUM(t.duration_ms) AS total_duration_ms
+            FROM listening_history lh
+            JOIN tracks t ON lh.track_id = t.track_id
+            WHERE lh.user_id = :user_id
+            GROUP BY month
+            ORDER BY month DESC;
+        """)
+        result = await self.db.execute(query, {"user_id": user_id})
+        rows = result.fetchall()
+        
+        monthly_stats = []
+        for row in rows:
+            month, total_songs, total_duration_ms = row
+            monthly_stats.append({
+                "month": month,
+                "total_songs_listened": total_songs,
+                "total_duration_minutes": total_duration_ms // 60000,
+                "total_duration_hours": total_duration_ms // 3600000
+            })
+        
+        return monthly_stats
 
     #Allow users to follow each other, view comparisons, and generate social listening insights.
 
