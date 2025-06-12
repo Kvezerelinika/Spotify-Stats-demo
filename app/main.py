@@ -365,6 +365,65 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
     return templates.TemplateResponse("dashboard.html", context)
 
 
+# /users/{user_id}	
+# Endpoint to fetch user profile data
+@app.get("/users/{user_id}")
+async def get_user_profile(request: Request, user_id: str, db=Depends(get_db_connection)):
+    # Fetch user profile from the database
+    stmt = select(
+        User.user_id,
+        User.image_url,
+        User.display_name,
+        User.custom_username,
+        User.bio,
+        User.preferred_language,
+        User.timezone
+    ).where(User.user_id == user_id)
+
+    result = await db.execute(stmt)
+    user_info = result.one_or_none()
+
+    if not user_info:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_info_dict = dict(user_info._mapping)
+
+    return JSONResponse(content={
+        "user_id": user_info_dict["user_id"],
+        "image_url": user_info_dict["image_url"],
+        "display_name": user_info_dict["display_name"],
+        "custom_username": user_info_dict.get("custom_username", ""),
+        "bio": user_info_dict.get("bio", ""),
+        "preferred_language": user_info_dict.get("preferred_language", ""),
+        "timezone": user_info_dict.get("timezone", "")
+    })
+
+# /tracks/{track_id}	
+
+# /albums/{album_id}	
+
+# /artists/{artist_id}	
+
+# /genres/{genre_name}	
+
+# /compare/{user_id_1}/{user_id_2}	
+
+# /search?q=...	
+
+# /trending or /explore	Global stats — most listened artists/tracks across the platform.
+
+# /history or /timeline	Personal listening history (calendar/timeline view).
+
+# /messages, /notifications 
+
+# /users/{user_id}/followers See who follows this user.
+
+# /users/{user_id}/following See which users they follow.
+
+# /users/{user_id}/library	Personal saved albums, artists, tracks.
+
+# /users/{user_id}/stats	Deep dive into listening patterns, streaks, genres, etc.
+
 
 @app.get("/profile", response_class=HTMLResponse)
 async def profile(request: Request):
