@@ -313,11 +313,16 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
             print(f"Month: {month}, total_songs_listened: {total_songs_listened}, "
                   f"total_duration_minutes: {total_duration_minutes} minutes, "
                   f"total_duration_hours: {total_duration_hours} hours")
+            
+        # First song listened
+        first_last_listened = await user_service.get_first_and_last_listened()
+        print(f"first_last_listened: {first_last_listened}")
 
+        # Unique numbers of artists and tracks
+        unique_artists_count = await user_service.get_unique_listening_counts()
+        print(f"Unique artists count: {unique_artists_count}")
 
-
-
-
+        # Get currently playing track
         spotify_client = SpotifyClient(token)
         playing_now_data = await spotify_client.get_now_playing() or {
             "track_name": "N/A",

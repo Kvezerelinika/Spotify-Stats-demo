@@ -523,7 +523,7 @@ class MusicDataService:
         result = await self.db.execute(query, {"user_id": user_id})
         return [dict(row._mapping) for row in result.fetchall()]
     
-    #SONGs LISTENED BY MONTH and MIN/HOURS LISTENED BY MONTH
+    #songs listened by month and min/hours listened by month
     async def get_monthly_stats(self, user_id: int):
         query = text("""
             SELECT 
@@ -550,6 +550,118 @@ class MusicDataService:
             })
         
         return monthly_stats
+    
+    # the information about first/last song user listened
+    async def get_first_and_last_listened(self):
+        query = text("""
+            WITH first_play AS (
+                SELECT lh.played_at, t.track_id, t.name AS track_name, t.album_image_url AS track_image, t.spotify_url AS track_url,
+                    a.artist_id, a.name AS artist_name, a.image_url AS artist_image, a.spotify_url AS artist_url,
+                    al.album_id, al.name AS album_name, al.image_url AS album_image, al.spotify_url AS album_url
+                FROM listening_history lh
+                JOIN tracks t ON lh.track_id = t.track_id
+                JOIN artists a ON t.artist_id = a.artist_id
+                JOIN albums al ON t.album_id = al.album_id
+                WHERE lh.user_id = :user_id
+                ORDER BY lh.played_at ASC
+                LIMIT 1
+            ),
+            last_play AS (
+                SELECT lh.played_at, t.track_id, t.name AS track_name, t.album_image_url AS track_image, t.spotify_url AS track_url,
+                    a.artist_id, a.name AS artist_name, a.image_url AS artist_image, a.spotify_url AS artist_url,
+                    al.album_id, al.name AS album_name, al.image_url AS album_image, al.spotify_url AS album_url
+                FROM listening_history lh
+                JOIN tracks t ON lh.track_id = t.track_id
+                JOIN artists a ON t.artist_id = a.artist_id
+                JOIN albums al ON t.album_id = al.album_id
+                WHERE lh.user_id = :user_id
+                ORDER BY lh.played_at DESC
+                LIMIT 1
+            )
+            SELECT 
+                fp.played_at AS first_played,
+                fp.track_id AS first_track_id,
+                fp.track_name AS first_track_name,
+                fp.album_id AS first_album_id,
+                fp.album_name AS first_album_name,
+                fp.artist_id AS first_artist_id,
+                fp.artist_name AS first_artist_name,
+                fp.album_image AS first_album_image,
+                fp.album_url AS first_album_url,
+                fp.artist_image AS first_artist_image,
+                fp.artist_url AS first_artist_url,
+                fp.track_image AS first_track_image,
+                fp.track_url AS first_track_url,
+                (
+                    SELECT COUNT(*) FROM listening_history
+                    WHERE user_id = :user_id AND track_id = fp.track_id
+                ) AS first_track_play_count,
+
+                lp.played_at AS last_played,
+                lp.track_id AS last_track_id,
+                lp.track_name AS last_track_name,
+                lp.album_id AS last_album_id,
+                lp.album_name AS last_album_name,
+                lp.artist_id AS last_artist_id,
+                lp.artist_name AS last_artist_name,
+                lp.album_image AS last_album_image,
+                lp.album_url AS last_album_url,
+                lp.artist_image AS last_artist_image,
+                lp.artist_url AS last_artist_url,
+                lp.track_image AS last_track_image,
+                lp.track_url AS last_track_url,
+                (
+                    SELECT COUNT(*) FROM listening_history
+                    WHERE user_id = :user_id AND track_id = lp.track_id
+                ) AS last_track_play_count
+            FROM first_play fp, last_play lp;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
+    
+    # unique number of songs listened to
+    # unique number of albums listened to
+    # unique number of artists listened to
+    # unique number of genres listened to
+    async def get_unique_listening_counts(self):
+        query = text("""
+            SELECT
+                -- Unique tracks listened by user
+                (SELECT COUNT(DISTINCT lh.track_id)
+                FROM listening_history lh
+                WHERE lh.user_id = :user_id) AS unique_tracks,
+
+                -- Unique albums listened by user (via track -> album)
+                (SELECT COUNT(DISTINCT t.album_id)
+                FROM listening_history lh
+                JOIN tracks t ON lh.track_id = t.track_id
+                WHERE lh.user_id = :user_id) AS unique_albums,
+
+                -- Unique artists listened by user (via track -> artist)
+                (SELECT COUNT(DISTINCT t.artist_id)
+                FROM listening_history lh
+                JOIN tracks t ON lh.track_id = t.track_id
+                WHERE lh.user_id = :user_id) AS unique_artists,
+
+                -- Unique genres listened by user (UNNEST artist.genres from tracks they've listened to)
+                (SELECT COUNT(DISTINCT genre)
+                FROM (
+                    SELECT UNNEST(a.genres) AS genre
+                    FROM listening_history lh
+                    JOIN tracks t ON lh.track_id = t.track_id
+                    JOIN artists a ON t.artist_id = a.artist_id
+                    WHERE lh.user_id = :user_id
+                ) subquery_genres
+                ) AS unique_genres;
+        """)
+        result = await self.db.execute(query, {"user_id": self.user_id})
+        row = result.fetchone()
+        return dict(row._mapping) if row else None
+
+
+
 
     #Allow users to follow each other, view comparisons, and generate social listening insights.
 
