@@ -1,0 +1,65 @@
+<!-- templates/album_details.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ album_info.album_name }} - Album Details</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .album-header {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .album-cover {
+            width: 220px;
+            height: 220px;
+            border-radius: 12px;
+            object-fit: cover;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .album-meta h1 {
+            margin: 0;
+        }
+        .album-meta p {
+            margin: 6px 0;
+        }
+        .spotify-link {
+            margin-top: 12px;
+        }
+        .spotify-link a {
+            background-color: #1DB954;
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .spotify-link a:hover {
+            background-color: #17a84b;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="album-header">
+        <img src="{{ album_info.image_url or '/static/default-album.png' }}" alt="Album Cover" class="album-cover">
+        <div class="album-meta">
+            <h1>{{ album_info.album_name }}</h1>
+            <p><strong>Artist:</strong> <a href="/artists/{{ album_info.artist_id }}">{{ album_info.artist_name }}</a></p>
+            <p><strong>Release Date:</strong> {{ album_info.release_date or "Unknown" }}</p>
+            <p><strong>Total Tracks:</strong> {{ album_info.total_tracks }}</p>
+            <div class="spotify-link">
+                <a href="{{ album_info.spotify_url }}" target="_blank">Open in Spotify</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

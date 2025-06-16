@@ -450,13 +450,14 @@ class SpotifyDataSaver:
                 artist_id = album_details["artists"][0]["id"] if album_details.get("artists") else None
                 image_url = album_details["images"][0]["url"] if album_details.get("images") else None
                 spotify_url = album_details.get("external_urls", {}).get("spotify")
+                total_tracks = album_details.get("total_tracks", 0)
 
                 if not album_id or not name or not artist_id:
                     print(f"Missing required album data for album {album_id}")
                     continue
 
                 new_artists.add(artist_id)
-                tot_albums.append((album_id, name, artist_id, image_url, spotify_url))
+                tot_albums.append((album_id, name, artist_id, image_url, spotify_url, total_tracks))
 
         # Fetch artist details first (API call)
         if new_artists:
@@ -472,7 +473,7 @@ class SpotifyDataSaver:
                 if tot_albums:
                     query = text("""
                         INSERT INTO albums (album_id, name, artist_id, image_url, spotify_url)
-                        VALUES (:album_id, :name, :artist_id, :image_url, :spotify_url)
+                        VALUES (:album_id, :name, :artist_id, :image_url, :spotify_url, :total_tracks)
                         ON CONFLICT (album_id) DO NOTHING;
                     """)
 
@@ -482,7 +483,8 @@ class SpotifyDataSaver:
                             "name": album[1],
                             "artist_id": album[2],
                             "image_url": album[3],
-                            "spotify_url": album[4]
+                            "spotify_url": album[4],
+                            "total_tracks": album[5]
                         })
 
             print("Album details inserted successfully.")

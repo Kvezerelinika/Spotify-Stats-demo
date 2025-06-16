@@ -1,0 +1,38 @@
+<!-- templates/user_profile.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ user_info.display_name }}'s Profile</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .profile-img { width: 120px; height: 120px; border-radius: 60px; }
+        .profile-header { display: flex; align-items: center; gap: 20px; }
+        .bio { font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="profile-header">
+        <img src="{{ user_info.image_url or '/static/default-avatar.png' }}" alt="Profile Image" class="profile-img">
+        <div>
+            <h1>{{ user_info.display_name }}</h1>
+            {% if user_info.custom_username %}
+                <p>@{{ user_info.custom_username }}</p>
+            {% endif %}
+            {% if user_info.bio %}
+                <p class="bio">{{ user_info.bio }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <hr>
+
+    <h3>Preferences</h3>
+    <ul>
+        <li>Preferred Language: {{ user_info.preferred_language or "Not set" }}</li>
+        <li>Timezone: {{ user_info.timezone or "Not set" }}</li>
+    </ul>
+
+    <!-- Later you can add: top artists, tracks, streaks, etc. -->
+</body>
+</html>

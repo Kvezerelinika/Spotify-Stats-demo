@@ -17,7 +17,7 @@ from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
 from app.spotify_api import SpotifyClient
 from app.database import get_db_connection, AsyncSessionLocal
 from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
-from app.db import User
+from app.db import User, Track, Album, Artist
 
 # Function to fetch user data from Spotify
 import httpx
@@ -367,9 +367,8 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
 
 # /users/{user_id}	
 # Endpoint to fetch user profile data
-@app.get("/users/{user_id}")
+@app.get("/users/{user_id}", response_class=HTMLResponse)
 async def get_user_profile(request: Request, user_id: str, db=Depends(get_db_connection)):
-    # Fetch user profile from the database
     stmt = select(
         User.user_id,
         User.image_url,
@@ -388,21 +387,105 @@ async def get_user_profile(request: Request, user_id: str, db=Depends(get_db_con
 
     user_info_dict = dict(user_info._mapping)
 
-    return JSONResponse(content={
-        "user_id": user_info_dict["user_id"],
-        "image_url": user_info_dict["image_url"],
-        "display_name": user_info_dict["display_name"],
-        "custom_username": user_info_dict.get("custom_username", ""),
-        "bio": user_info_dict.get("bio", ""),
-        "preferred_language": user_info_dict.get("preferred_language", ""),
-        "timezone": user_info_dict.get("timezone", "")
+    return templates.TemplateResponse("user_profile.html", {
+        "request": request,
+        "user_info": user_info_dict,
     })
 
-# /tracks/{track_id}	
+# /tracks/{track_id}
+@app.get("/tracks/{track_id}")
+async def get_track_details(request: Request, track_id: str, db=Depends(get_db_connection)):
+    # Fetch track details from the database
+    stmt = select(
+        Track.track_id,
+        Track.name,
+        Track.album_id,
+        Track.artist_id,
+        Track.artist_name,
+        Track.spotify_url,
+        Track.duration_ms,
+        Track.popularity,
+        Track.explicit,
+        Track.track_number,
+        Track.album_release_date,
+        Track.album_image_url,
+        Track.album_name
+
+    ).where(Track.track_id == track_id)
+
+    result = await db.execute(stmt)
+    track_info = result.one_or_none()
+
+    if not track_info:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    track_info_dict = dict(track_info._mapping)
+
+    return templates.TemplateResponse("track_details.html", {
+        "request": request,
+        "track_info": track_info_dict,
+    })	
 
 # /albums/{album_id}	
+@app.get("/albums/{album_id}")
+async def get_album_details(request: Request, album_id: str, db=Depends(get_db_connection)):
+    # Fetch album details from the database
+    stmt = (
+        select(
+            Album.album_id,
+            Album.name.label("album_name"),
+            Album.release_date,
+            Album.image_url,
+            Album.spotify_url,
+            Album.total_tracks,
+            Artist.artist_id,
+            Artist.name.label("artist_name")
+        )
+        .join(Artist, Album.artist_id == Artist.artist_id)
+        .where(Album.album_id == album_id)
+    )
+
+    result = await db.execute(stmt)
+    album_info = result.one_or_none()
+
+    if not album_info:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    album_info_dict = dict(album_info._mapping)
+
+    return templates.TemplateResponse("album_details.html", {
+        "request": request,
+        "album_info": album_info_dict,
+    })
 
 # /artists/{artist_id}	
+@app.get("/artists/{artist_id}")
+async def get_artist_details(request: Request, artist_id: str, db=Depends(get_db_connection)):
+    # Fetch artist details from the database
+    stmt = (
+        select(
+            Artist.artist_id,
+            Artist.name.label("artist_name"),
+            Artist.image_url,
+            Artist.spotify_url,
+            Artist.popularity,
+            Artist.genres
+        )
+        .where(Artist.artist_id == artist_id)
+    )
+
+    result = await db.execute(stmt)
+    artist_info = result.one_or_none()
+
+    if not artist_info:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    artist_info_dict = dict(artist_info._mapping)
+
+    return templates.TemplateResponse("artist_details.html", {
+        "request": request,
+        "artist_info": artist_info_dict,
+    })
 
 # /genres/{genre_name}	
 

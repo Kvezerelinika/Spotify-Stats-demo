@@ -1,0 +1,35 @@
+<!-- templates/track_details.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ track_info.name }} - Track Details</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .track-cover { width: 200px; height: 200px; border-radius: 12px; object-fit: cover; }
+        .header { display: flex; align-items: center; gap: 20px; }
+        .info { margin-top: 20px; }
+        .info p { margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{ track_info.album_image_url or '/static/default-album.png' }}" alt="Album Cover" class="track-cover">
+        <div>
+            <h1>{{ track_info.name }}</h1>
+            <p><strong>Artist:</strong> <a href="/artists/{{ track_info.artist_id }}">{{ track_info.artist_name }}</a></p>
+            <p><strong>Album:</strong> <a href="/albums/{{ track_info.album_id }}">{{ track_info.album_name }}</a></p>
+            <p><strong>Release Date:</strong> {{ track_info.album_release_date or "N/A" }}</p>
+        </div>
+    </div>
+
+    <div class="info">
+        <h3>Track Info</h3>
+        <p><strong>Track Number:</strong> {{ track_info.track_number }}</p>
+        <p><strong>Duration:</strong> {{ (track_info.duration_ms // 60000) }}:{{ '%02d' % ((track_info.duration_ms // 1000) % 60) }} minutes</p>
+        <p><strong>Popularity:</strong> {{ track_info.popularity }}</p>
+        <p><strong>Explicit:</strong> {{ "Yes" if track_info.explicit else "No" }}</p>
+        <p><a href="{{ track_info.spotify_url }}" target="_blank">Open in Spotify</a></p>
+    </div>
+</body>
+</html>

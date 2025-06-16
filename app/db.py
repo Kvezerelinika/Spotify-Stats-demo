@@ -125,6 +125,7 @@ class Album(Base):
     release_date = Column(Date)  # Release date of the album
     popularity = Column(Integer)  # Popularity score of the album
     label = Column(String(255))  # Label of the album (optional, max length 255 characters)
+    total_tracks = Column(Integer, nullable=True)  # Total number of tracks in the album (optional)
 
     tracks = relationship("Track", back_populates="albums")  # Relationship with Tracks
     artists = relationship("Artist", back_populates="albums") # Relationship with Artist (optional, since artist_id can be NULL)
