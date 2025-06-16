@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ genre_name | title }} - Genre Explorer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+        h1 {
+            font-size: 32px;
+        }
+
+        .tabs {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .tabs button {
+            padding: 10px 16px;
+            border: none;
+            background: #eee;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .tabs button.active {
+            background: #1DB954;
+            color: white;
+        }
+
+        .section { display: none; }
+        .section.active { display: block; }
+
+        .card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: white;
+            padding: 14px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        .card img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .card-content {
+            flex: 1;
+        }
+        .card-content h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .card-content p {
+            margin: 4px 0;
+            color: #555;
+        }
+        .spotify-link a {
+            background-color: #1DB954;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Genre: {{ genre_name | title }}</h1>
+
+<form method="get" action="" style="margin-bottom: 20px;">
+    <input type="text" name="search" value="{{ search or '' }}" placeholder="Search tracks..." />
+    
+    <select name="sort">
+        <option value="popularity" {% if sort == "popularity" %}selected{% endif %}>Sort by Popularity</option>
+        <option value="release_date" {% if sort == "release_date" %}selected{% endif %}>Sort by Release Date</option>
+    </select>
+    
+    <button type="submit">Apply</button>
+</form>
+
+<div class="tabs">
+    <button onclick="showSection('artists', event)" class="active">Artists</button>
+    <button onclick="showSection('albums', event)">Albums</button>
+    <button onclick="showSection('tracks', event)">Tracks</button>
+</div>
+
+<div id="artists" class="section card-list">
+    {% for artist in genre_artists %}
+    <div class="card">
+        <img src="{{ artist.image_url or '/static/default-artist.png' }}" alt="Artist image for {{ artist.name }}">
+        <div class="card-content">
+            <h2><a href="/artists/{{ artist.artist_id }}">{{ artist.name }}</a></h2>
+        </div>
+        <div class="spotify-link">
+            <a href="{{ artist.spotify_url }}" target="_blank">Spotify</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="albums" class="section card-list" style="display: none;">
+    {% for album in genre_albums %}
+    <div class="card">
+        <img src="{{ album.image_url or '/static/default-album.png' }}" alt="Album cover for {{ album.album_name }}">
+        <div class="card-content">
+            <h2><a href="/albums/{{ album.album_id }}">{{ album.album_name }}</a></h2>
+            <p>Release: {{ album.release_date }}</p>
+        </div>
+        <div class="spotify-link">
+            <a href="{{ album.spotify_url }}" target="_blank">Spotify</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="tracks" class="section card-list" style="display: none;">
+    {% for track in genre_tracks %}
+    <div class="card">
+        <img src="{{ track.album_image_url or '/static/default-album.png' }}" alt="Album cover for {{ track.album_name }}">
+        <div class="card-content">
+            <h2>{{ track.track_name }}</h2>
+            <p>By <a href="/artists/{{ track.artist_id }}">{{ track.artist_name }}</a></p>
+            <p>Album: {{ track.album_name }}</p>
+        </div>
+        <div class="spotify-link">
+            <a href="{{ track.spotify_url }}" target="_blank">Spotify</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div style="margin-top: 20px;">
+    {% if total_pages > 1 %}
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+                <strong>{{ p }}</strong>
+            {% else %}
+                <a href="?page={{ p }}{% if sort %}&sort={{ sort }}{% endif %}{% if search %}&search={{ search }}{% endif %}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    function showSection(sectionId, event) {
+        document.querySelectorAll('.section').forEach(section => {
+            section.style.display = 'none';
+        });
+
+        document.querySelectorAll('.tabs button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        document.getElementById(sectionId).style.display = 'block';
+        event.target.classList.add('active');
+
+        localStorage.setItem('activeTab', sectionId);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const savedTab = localStorage.getItem('activeTab') || 'artists';
+        const tabButton = [...document.querySelectorAll('.tabs button')].find(
+            btn => btn.textContent.toLowerCase() === savedTab
+        );
+        if (tabButton) {
+            showSection(savedTab, { target: tabButton });
+        } else {
+            showSection('artists', { target: document.querySelector('.tabs button') });
+        }
+    });
+</script>
+
+</body>
+</html>

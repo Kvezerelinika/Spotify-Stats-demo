@@ -488,8 +488,147 @@ async def get_artist_details(request: Request, artist_id: str, db=Depends(get_db
     })
 
 # /genres/{genre_name}	
+from sqlalchemy import func
+from math import ceil
+
+@app.get("/genres/{genre_name}")
+async def get_genre_details(
+    request: Request,
+    genre_name: str,
+    db=Depends(get_db_connection),
+    search: str = "",
+    sort: str = "popularity",  # or "release_date"
+    page: int = 1,
+    limit: int = 10
+):
+    offset = (page - 1) * limit
+
+    # 1. Get artists matching genre
+    artist_stmt = select(
+        Artist.artist_id,
+        Artist.name,
+        Artist.image_url,
+        Artist.spotify_url
+    ).where(Artist.genres.any(genre_name))
+
+    artist_result = await db.execute(artist_stmt)
+    genre_artists = [dict(row._mapping) for row in artist_result.fetchall()]
+    artist_ids = [a["artist_id"] for a in genre_artists]
+
+    if not artist_ids:
+        raise HTTPException(status_code=404, detail="Genre not found")
+
+    # 2. Filtered track list (with search and sorting)
+    track_stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_id,
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url
+    ).where(Track.artist_id.in_(artist_ids))
+
+    if search:
+        track_stmt = track_stmt.where(Track.name.ilike(f"%{search}%"))
+
+    if sort == "popularity":
+        track_stmt = track_stmt.order_by(Track.popularity.desc())
+    elif sort == "release_date":
+        track_stmt = track_stmt.order_by(Track.release_date.desc())
+
+    track_count_stmt = select(func.count()).select_from(track_stmt.subquery())
+    track_count = (await db.execute(track_count_stmt)).scalar_one()
+    total_pages = ceil(track_count / limit)
+
+    track_stmt = track_stmt.offset(offset).limit(limit)
+    track_result = await db.execute(track_stmt)
+    genre_tracks = [dict(row._mapping) for row in track_result.fetchall()]
+
+    # 3. Albums (optional: same pagination logic)
+    album_stmt = select(
+        Album.album_id,
+        Album.name.label("album_name"),
+        Album.artist_id,
+        Album.image_url,
+        Album.spotify_url,
+        Album.release_date
+    ).where(Album.artist_id.in_(artist_ids))
+
+    if sort == "release_date":
+        album_stmt = album_stmt.order_by(Album.release_date.desc())
+
+    album_result = await db.execute(album_stmt)
+    genre_albums = [dict(row._mapping) for row in album_result.fetchall()]
+
+    return templates.TemplateResponse("genre_details.html", {
+        "request": request,
+        "genre_name": genre_name,
+        "genre_artists": genre_artists,
+        "genre_tracks": genre_tracks,
+        "genre_albums": genre_albums,
+        "search": search,
+        "sort": sort,
+        "page": page,
+        "total_pages": total_pages
+    })
+
+
+
 
 # /compare/{user_id_1}/{user_id_2}	
+@app.get("/compare/{user_id_1}/{user_id_2}")
+async def compare_users(
+    request: Request,
+    user_id_1: str,
+    user_id_2: str,
+    db=Depends(get_db_connection)
+):
+    # Fetch user profiles
+    stmt = select(
+        User.user_id,
+        User.image_url,
+        User.display_name,
+        User.custom_username,
+        User.bio
+    ).where(User.user_id.in_([user_id_1, user_id_2]))
+
+    result = await db.execute(stmt)
+    users_info = {row.user_id: dict(row._mapping) for row in result.fetchall()}
+
+    if user_id_1 not in users_info or user_id_2 not in users_info:
+        raise HTTPException(status_code=404, detail="One or both users not found")
+
+    # Fetch top artists and tracks for both users
+    top_artists_stmt = select(
+        Artist.artist_id,
+        Artist.name.label("artist_name"),
+        Artist.image_url,
+        Artist.spotify_url
+    ).where(Artist.user_id.in_([user_id_1, user_id_2]))
+
+    top_tracks_stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url
+    ).where(Track.user_id.in_([user_id_1, user_id_2]))
+
+    top_artists_result = await db.execute(top_artists_stmt)
+    top_tracks_result = await db.execute(top_tracks_stmt)
+
+    top_artists = {row.artist_id: dict(row._mapping) for row in top_artists_result.fetchall()}
+    top_tracks = {row.track_id: dict(row._mapping) for row in top_tracks_result.fetchall()}
+
+    return templates.TemplateResponse("compare_users.html", {
+        "request": request,
+        "user_info_1": users_info[user_id_1],
+        "user_info_2": users_info[user_id_2],
+        "top_artists": top_artists,
+        "top_tracks": top_tracks
+    })
 
 # /search?q=...	
 
