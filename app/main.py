@@ -631,6 +631,57 @@ async def compare_users(
     })
 
 # /search?q=...	
+@app.get("/search")
+async def search(request: Request, q: str = Query(..., min_length=1), db=Depends(get_db_connection), limit: int = Query(10, ge=1, le=50), offset: int = Query(0, ge=0)
+):
+    # Search for tracks, artists, and albums
+    search_results = {
+        "tracks": [],
+        "artists": [],
+        "albums": []
+    }
+
+    # Search tracks
+    track_stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url
+    ).where(Track.name.ilike(f"%{q}%")).offset(offset).limit(limit)
+
+    track_result = await db.execute(track_stmt)
+    search_results["tracks"] = [dict(row._mapping) for row in track_result.fetchall()]
+
+    # Search artists
+    artist_stmt = select(
+        Artist.artist_id,
+        Artist.name.label("artist_name"),
+        Artist.image_url,
+        Artist.spotify_url
+    ).where(Artist.name.ilike(f"%{q}%")).offset(offset).limit(limit)
+
+    artist_result = await db.execute(artist_stmt)
+    search_results["artists"] = [dict(row._mapping) for row in artist_result.fetchall()]
+
+    # Search albums
+    album_stmt = select(
+        Album.album_id,
+        Album.name.label("album_name"),
+        Album.artist_id,
+        Album.image_url,
+        Album.spotify_url
+    ).where(Album.name.ilike(f"%{q}%")).offset(offset).limit(limit)
+
+    album_result = await db.execute(album_stmt)
+    search_results["albums"] = [dict(row._mapping) for row in album_result.fetchall()]
+
+    return templates.TemplateResponse("search_results.html", {
+        "request": request,
+        "query": q,
+        "search_results": search_results
+    })
 
 # /trending or /explore	Global stats — most listened artists/tracks across the platform.
 
