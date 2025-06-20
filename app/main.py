@@ -684,6 +684,38 @@ async def search(request: Request, q: str = Query(..., min_length=1), db=Depends
     })
 
 # /trending or /explore	Global stats — most listened artists/tracks across the platform.
+@app.get("/trending")   
+async def trending(request: Request, db=Depends(get_db_connection)):
+    # Fetch global stats for trending artists and tracks
+    stmt = select(
+        Artist.artist_id,
+        Artist.name.label("artist_name"),
+        Artist.image_url,
+        Artist.spotify_url,
+        func.count(Track.track_id).label("total_streams")
+    ).join(Track, Track.artist_id == Artist.artist_id).group_by(Artist.artist_id).order_by(func.count(Track.track_id).desc()).limit(10)
+
+    result = await db.execute(stmt)
+    trending_artists = [dict(row._mapping) for row in result.fetchall()]
+
+    track_stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url,
+        func.count().label("total_streams")
+    ).group_by(Track.track_id).order_by(func.count().desc()).limit(10)
+
+    track_result = await db.execute(track_stmt)
+    trending_tracks = [dict(row._mapping) for row in track_result.fetchall()]
+
+    return templates.TemplateResponse("trending.html", {
+        "request": request,
+        "trending_artists": trending_artists,
+        "trending_tracks": trending_tracks
+    })
 
 # /history or /timeline	Personal listening history (calendar/timeline view).
 

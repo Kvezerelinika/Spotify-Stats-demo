@@ -472,7 +472,7 @@ class SpotifyDataSaver:
             async with self.db.begin():
                 if tot_albums:
                     query = text("""
-                        INSERT INTO albums (album_id, name, artist_id, image_url, spotify_url)
+                        INSERT INTO albums (album_id, name, artist_id, image_url, spotify_url, total_tracks)
                         VALUES (:album_id, :name, :artist_id, :image_url, :spotify_url, :total_tracks)
                         ON CONFLICT (album_id) DO NOTHING;
                     """)
