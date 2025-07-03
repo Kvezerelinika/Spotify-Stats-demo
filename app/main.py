@@ -726,6 +726,185 @@ async def trending(request: Request, db=Depends(get_db_connection)):
 async def messages_page(request: Request):
     return templates.TemplateResponse("messages.html", {"request": request})
 
+# STREAMS BY DAY OF THE WEEK
+@app.get("/streams-by-day")
+async def streams_by_day(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+    # Fetch streams by day of the week
+    stmt = select(
+        func.to_char(Track.played_at, 'Day').label('day_of_week'),
+        func.count(Track.track_id).label('stream_count')
+    ).where(Track.user_id == user_id).group_by(func.to_char(Track.played_at, 'Day')).order_by(func.to_char(Track.played_at, 'Day'))
+    result = await db.execute(stmt)
+    streams_by_day = {row.day_of_week.strip(): row.stream_count for row in result.fetchall()}
+    # Ensure all days are present in the result
+    days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    for day in days_of_week:
+        if day not in streams_by_day:
+            streams_by_day[day] = 0
+    return templates.TemplateResponse("streams_by_day.html", {
+        "request": request,
+        "streams_by_day": streams_by_day
+    })
+
+#STREAMS BY MONTH OF THE YEAR
+@app.get("/streams-by-month")
+async def streams_by_month(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+    # Fetch streams by month of the year
+    stmt = select(
+        func.to_char(Track.played_at, 'Month').label('month'),
+        func.count(Track.track_id).label('stream_count')
+    ).where(Track.user_id == user_id).group_by(func.to_char(Track.played_at, 'Month')).order_by(func.to_char(Track.played_at, 'Month'))
+    result = await db.execute(stmt)
+    streams_by_month = {row.month.strip(): row.stream_count for row in result.fetchall()}
+    # Ensure all months are present in the result
+    months_of_year = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    for month in months_of_year:
+        if month not in streams_by_month:
+            streams_by_month[month] = 0
+    return templates.TemplateResponse("streams_by_month.html", {
+        "request": request,
+        "streams_by_month": streams_by_month
+    })
+
+#ON THIS DAY YOU LISTENED
+@app.get("/on-this-day")
+async def on_this_day(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+    today = datetime.now(timezone.utc).date()
+
+    # Fetch tracks listened to on this day in previous years
+    stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url,
+        func.date(Track.played_at).label("listened_date")
+    ).where(
+        func.date(Track.played_at) == today
+    ).where(Track.user_id == user_id)
+
+    result = await db.execute(stmt)
+    tracks_today = [dict(row._mapping) for row in result.fetchall()]
+
+    return templates.TemplateResponse("on_this_day.html", {
+        "request": request,
+        "tracks_today": tracks_today,
+        "today": today
+    })
+
+#TODAYS TOPS
+@app.get("/todays-tops")
+async def todays_tops(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+    today = datetime.now(timezone.utc).date()
+
+    # Fetch today's top tracks
+    stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url,
+        func.count(Track.track_id).label("stream_count")
+    ).where(
+        func.date(Track.played_at) == today,
+        Track.user_id == user_id
+    ).group_by(
+        Track.track_id, Track.name, Track.artist_name, Track.album_name, Track.album_image_url, Track.spotify_url
+    ).order_by(func.count(Track.track_id).desc()).limit(10)
+
+    result = await db.execute(stmt)
+    top_tracks_today = [dict(row._mapping) for row in result.fetchall()]
+
+    return templates.TemplateResponse("todays_tops.html", {
+        "request": request,
+        "top_tracks_today": top_tracks_today,
+        "today": today
+    })
+
+#ALL ARTIST LISTENED BY STREAMS
+
+@app.get("/all-artists")
+async def all_artists(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+
+    # Fetch all artists listened to by the user, ordered by total streams
+    stmt = select(
+        Artist.artist_id,
+        Artist.name.label("artist_name"),
+        Artist.image_url,
+        Artist.spotify_url,
+        func.count(Track.track_id).label("total_streams")
+    ).join(Track, Track.artist_id == Artist.artist_id).where(Track.user_id == user_id).group_by(
+        Artist.artist_id, Artist.name, Artist.image_url, Artist.spotify_url
+    ).order_by(func.count(Track.track_id).desc())
+
+    result = await db.execute(stmt)
+    all_artists = [dict(row._mapping) for row in result.fetchall()]
+
+    return templates.TemplateResponse("all_artists.html", {
+        "request": request,
+        "all_artists": all_artists
+    })
+
+#GLOBAL RANK PER ARTIST
+@app.get("/global-artist-rank")
+async def global_artist_rank(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+
+    # Fetch global artist rank based on total streams
+    stmt = select(
+        Artist.artist_id,
+        Artist.name.label("artist_name"),
+        Artist.image_url,
+        Artist.spotify_url,
+        func.count(Track.track_id).label("total_streams")
+    ).join(Track, Track.artist_id == Artist.artist_id).where(Track.user_id == user_id).group_by(
+        Artist.artist_id, Artist.name, Artist.image_url, Artist.spotify_url
+    ).order_by(func.count(Track.track_id).desc())
+
+    result = await db.execute(stmt)
+    global_artist_rank = [dict(row._mapping) for row in result.fetchall()]
+
+    return templates.TemplateResponse("global_artist_rank.html", {
+        "request": request,
+        "global_artist_rank": global_artist_rank
+    })
+
+#GLOBAL RANK PER SONG
+@app.get("/global-song-rank")
+async def global_song_rank(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
+    user_id = user_data["user_id"]
+
+    # Fetch global song rank based on total streams
+    stmt = select(
+        Track.track_id,
+        Track.name.label("track_name"),
+        Track.artist_name,
+        Track.album_name,
+        Track.album_image_url,
+        Track.spotify_url,
+        func.count(Track.track_id).label("total_streams")
+    ).where(Track.user_id == user_id).group_by(
+        Track.track_id, Track.name, Track.artist_name, Track.album_name, Track.album_image_url, Track.spotify_url
+    ).order_by(func.count(Track.track_id).desc())
+
+    result = await db.execute(stmt)
+    global_song_rank = [dict(row._mapping) for row in result.fetchall()]
+
+    return templates.TemplateResponse("global_song_rank.html", {
+        "request": request,
+        "global_song_rank": global_song_rank
+    })
+
 # /users/{user_id}/followers See who follows this user.
 
 # /users/{user_id}/following See which users they follow.
