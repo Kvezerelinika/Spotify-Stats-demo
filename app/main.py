@@ -18,6 +18,7 @@ from app.spotify_api import SpotifyClient
 from app.database import get_db_connection, AsyncSessionLocal
 from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
 from app.db import User, Track, Album, Artist
+from app.routers import messages
 
 # Function to fetch user data from Spotify
 import httpx
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 router = APIRouter()
+app.include_router(messages.router)
 
 async def refresh_tokens_periodically():
     print("starting token refresh job")
@@ -720,6 +722,9 @@ async def trending(request: Request, db=Depends(get_db_connection)):
 # /history or /timeline	Personal listening history (calendar/timeline view).
 
 # /messages, /notifications 
+@app.get("/messages-page")
+async def messages_page(request: Request):
+    return templates.TemplateResponse("messages.html", {"request": request})
 
 # /users/{user_id}/followers See who follows this user.
 

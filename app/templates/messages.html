@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Messages</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+    }
+
+    .message-list {
+      border: 1px solid #ccc;
+      padding: 1rem;
+      height: 300px;
+      overflow-y: auto;
+      margin-bottom: 2rem;
+    }
+
+    .message-item {
+      border-bottom: 1px solid #eee;
+      padding: 0.5rem 0;
+    }
+
+    form input,
+    form textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    form button {
+      padding: 0.5rem 1rem;
+    }
+
+    .success {
+      color: green;
+    }
+
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Inbox</h1>
+    <div class="message-list" id="inbox"></div>
+
+    <h2>Send Message</h2>
+    <form id="messageForm">
+      <label for="receiver_id">Receiver ID:</label>
+      <input type="text" id="receiver_id" required />
+
+      <label for="content">Message:</label>
+      <textarea id="content" rows="4" required></textarea>
+
+      <button type="submit">Send</button>
+    </form>
+
+    <p id="status" class=""></p>
+  </div>
+
+  <script>
+    async function loadInbox() {
+      try {
+        const response = await fetch("/messages/inbox");
+        if (!response.ok) throw new Error("Failed to load inbox");
+        const messages = await response.json();
+
+        const inbox = document.getElementById("inbox");
+        inbox.innerHTML = "";
+
+        if (messages.length === 0) {
+          inbox.innerHTML = "<p>No messages</p>";
+          return;
+        }
+
+        messages.forEach(msg => {
+          const item = document.createElement("div");
+          item.className = "message-item";
+          item.innerHTML = `<strong>From:</strong> ${msg.sender_id}<br><strong>Message:</strong> ${msg.content}<br><small>${new Date(msg.timestamp).toLocaleString()}</small>`;
+          inbox.appendChild(item);
+        });
+      } catch (err) {
+        console.error(err);
+        document.getElementById("inbox").innerHTML = "<p class='error'>Failed to load messages</p>";
+      }
+    }
+
+    async function sendMessage(event) {
+      event.preventDefault();
+
+      const receiver_id = document.getElementById("receiver_id").value;
+      const content = document.getElementById("content").value;
+      const statusEl = document.getElementById("status");
+
+      try {
+        const response = await fetch("/messages/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ receiver_id, content })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || "Error sending message");
+        }
+
+        statusEl.textContent = "Message sent!";
+        statusEl.className = "success";
+
+        document.getElementById("messageForm").reset();
+        await loadInbox();
+      } catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.className = "error";
+      }
+    }
+
+    document.getElementById("messageForm").addEventListener("submit", sendMessage);
+    loadInbox();
+  </script>
+</body>
+</html>
