@@ -35,7 +35,8 @@ class OAuthSettings:
         self.SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
         self.SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/callback")
         self.SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-        self.SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
+        self.SCOPES = "user-read-email user-read-private user-top-read user-read-recently-played user-read-playback-state"
+
 
         client_creds = f"{self.SPOTIFY_CLIENT_ID}:{self.SPOTIFY_CLIENT_SECRET}"
         self.client_credentials_b64 = base64.b64encode(client_creds.encode()).decode()
@@ -167,22 +168,32 @@ class SpotifyUser:
         self.refresh_token = refresh_token
         self.expires_in = 3600  # Default expiration time in seconds
 
-    def get_user_profile(self) -> dict:
+    async def get_user_profile(self) -> dict:
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        user_response = requests.get("https://api.spotify.com/v1/me", headers=headers)
-        
-        if user_response.status_code != 200:
-            raise HTTPException(status_code=user_response.status_code, detail="Failed to fetch user data from Spotify")
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://api.spotify.com/v1/me", headers=headers)
 
-        return user_response.json()
+        print(f"Spotify response status: {response.status_code}")
+        print(f"Spotify response body: {response.text}")  # 🧠 THIS will help us see the real issue
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Failed to fetch user data from Spotify: {response.text}"
+            )
+
+        return response.json()
 
     async def store_user_info_to_database(self, user_profile: dict, db) -> Optional[dict]:
+        print("Storing user info to database...")   
         if isinstance(user_profile, dict):
             # Extract user profile details
             user_id = user_profile.get("id")
             display_name = user_profile.get("display_name")
             profile_url = user_profile.get("external_urls", {}).get("spotify")
-            image_url = user_profile.get("images", [{}])[0].get("url")
+            images = user_profile.get("images", [])
+            image_url = images[0].get("url") if images else None
+            print("User profile response from Spotify:", user_profile)
             username = user_profile.get("display_name")
             email = user_profile.get("email", "unknown_email@example.com")
             country = user_profile.get("country")
@@ -279,7 +290,7 @@ class SpotifyHandler:
         user.refresh_token = refresh_token
         user.expires_in = expires_in
 
-        user_profile = user.get_user_profile()
+        user_profile = await user.get_user_profile()
 
         # Store user info in database
         db = await get_db_connection()

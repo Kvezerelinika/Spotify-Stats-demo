@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Comparison</title>
+    <link rel="stylesheet" href="/static/css/compare.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Spotify User Comparison</h1>
+
+        <div class="profiles">
+            <div class="user-profile">
+                <img src="{{ user_info_1.image_url or '/static/default_user.png' }}" alt="User 1 Image">
+                <h2>{{ user_info_1.display_name or 'Unnamed' }}</h2>
+                <p>@{{ user_info_1.custom_username or 'no_username' }}</p>
+                <p>{{ user_info_1.bio or '' }}</p>
+            </div>
+            <div class="vs">VS</div>
+            <div class="user-profile">
+                <img src="{{ user_info_2.image_url or '/static/default_user.png' }}" alt="User 2 Image">
+                <h2>{{ user_info_2.display_name or 'Unnamed' }}</h2>
+                <p>@{{ user_info_2.custom_username or 'no_username' }}</p>
+                <p>{{ user_info_2.bio or '' }}</p>
+            </div>
+        </div>
+
+    <h2>Top Artists</h2>
+    <div class="comparison-section">
+        <div class="grid">
+            {% for artist in top_artists_1 %}
+                <a href="{{ artist.spotify_url }}" target="_blank" class="card">
+                    <img src="{{ artist.image_url or '/static/default_artist.png' }}" alt="{{ artist.artist_name }}">
+                    <p>{{ artist.artist_name }}</p>
+                </a>
+            {% endfor %}
+        </div>
+        <div class="vs-column">VS</div>
+        <div class="grid">
+            {% for artist in top_artists_2 %}
+                <a href="{{ artist.spotify_url }}" target="_blank" class="card">
+                    <img src="{{ artist.image_url or '/static/default_artist.png' }}" alt="{{ artist.artist_name }}">
+                    <p>{{ artist.artist_name }}</p>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <h2>Top Tracks</h2>
+    <div class="comparison-section">
+        <div class="grid">
+            {% for track in top_tracks_1 %}
+                <a href="{{ track.spotify_url }}" target="_blank" class="card">
+                    <img src="{{ track.album_image_url or '/static/default_album.png' }}" alt="{{ track.track_name }}">
+                    <p>{{ track.track_name }}</p>
+                    <small>{{ track.artist_name }} — {{ track.album_name }}</small>
+                </a>
+            {% endfor %}
+        </div>
+        <div class="vs-column">VS</div>
+        <div class="grid">
+            {% for track in top_tracks_2 %}
+                <a href="{{ track.spotify_url }}" target="_blank" class="card">
+                    <img src="{{ track.album_image_url or '/static/default_album.png' }}" alt="{{ track.track_name }}">
+                    <p>{{ track.track_name }}</p>
+                    <small>{{ track.artist_name }} — {{ track.album_name }}</small>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+
+</body>
+</html>

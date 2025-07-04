@@ -17,7 +17,7 @@ from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
 from app.spotify_api import SpotifyClient
 from app.database import get_db_connection, AsyncSessionLocal
 from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
-from app.db import User, Track, Album, Artist
+from app.db import User, Track, Album, Artist, UsersTopTracks, UsersTopArtists
 from app.routers import messages
 
 # Function to fetch user data from Spotify
@@ -601,36 +601,59 @@ async def compare_users(
     if user_id_1 not in users_info or user_id_2 not in users_info:
         raise HTTPException(status_code=404, detail="One or both users not found")
 
-    # Fetch top artists and tracks for both users
-    top_artists_stmt = select(
-        Artist.artist_id,
-        Artist.name.label("artist_name"),
-        Artist.image_url,
-        Artist.spotify_url
-    ).where(Artist.user_id.in_([user_id_1, user_id_2]))
+    # Fetch top artists for both users
+    top_artists_stmt = (
+        select(
+            UsersTopArtists.user_id,
+            Artist.artist_id,
+            Artist.name.label("artist_name"),
+            Artist.image_url,
+            Artist.spotify_url,
+            UsersTopArtists.rank
+        )
+        .join(Artist, Artist.artist_id == UsersTopArtists.artist_id)
+        .where(UsersTopArtists.user_id.in_([user_id_1, user_id_2]))
+        .order_by(UsersTopArtists.rank)
+    )
 
-    top_tracks_stmt = select(
-        Track.track_id,
-        Track.name.label("track_name"),
-        Track.artist_name,
-        Track.album_name,
-        Track.album_image_url,
-        Track.spotify_url
-    ).where(Track.user_id.in_([user_id_1, user_id_2]))
+    # Fetch top tracks for both users
+    top_tracks_stmt = (
+        select(
+            UsersTopTracks.user_id,
+            Track.track_id,
+            Track.name.label("track_name"),
+            Track.artist_name,
+            Track.album_name,
+            Track.album_image_url,
+            Track.spotify_url,
+            UsersTopTracks.rank
+        )
+        .join(Track, Track.track_id == UsersTopTracks.track_id)
+        .where(UsersTopTracks.user_id.in_([user_id_1, user_id_2]))
+        .order_by(UsersTopTracks.rank)
+    )
 
     top_artists_result = await db.execute(top_artists_stmt)
     top_tracks_result = await db.execute(top_tracks_stmt)
 
-    top_artists = {row.artist_id: dict(row._mapping) for row in top_artists_result.fetchall()}
-    top_tracks = {row.track_id: dict(row._mapping) for row in top_tracks_result.fetchall()}
+    top_artists_by_user = {user_id_1: [], user_id_2: []}
+    for row in top_artists_result.fetchall():
+        top_artists_by_user[row.user_id].append(dict(row._mapping))
+
+    top_tracks_by_user = {user_id_1: [], user_id_2: []}
+    for row in top_tracks_result.fetchall():
+        top_tracks_by_user[row.user_id].append(dict(row._mapping))
 
     return templates.TemplateResponse("compare_users.html", {
         "request": request,
         "user_info_1": users_info[user_id_1],
         "user_info_2": users_info[user_id_2],
-        "top_artists": top_artists,
-        "top_tracks": top_tracks
+        "top_artists_1": top_artists_by_user[user_id_1],
+        "top_artists_2": top_artists_by_user[user_id_2],
+        "top_tracks_1": top_tracks_by_user[user_id_1],
+        "top_tracks_2": top_tracks_by_user[user_id_2],
     })
+
 
 # /search?q=...	
 @app.get("/search")
