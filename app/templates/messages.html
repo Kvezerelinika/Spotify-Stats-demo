@@ -2,132 +2,114 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Messages</title>
+  <title>Modern Chat</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 2rem;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: auto;
-    }
-
-    .message-list {
-      border: 1px solid #ccc;
-      padding: 1rem;
-      height: 300px;
-      overflow-y: auto;
-      margin-bottom: 2rem;
-    }
-
-    .message-item {
-      border-bottom: 1px solid #eee;
-      padding: 0.5rem 0;
-    }
-
-    form input,
-    form textarea {
-      width: 100%;
-      padding: 0.5rem;
-      margin-bottom: 1rem;
-    }
-
-    form button {
-      padding: 0.5rem 1rem;
-    }
-
-    .success {
-      color: green;
-    }
-
-    .error {
-      color: red;
-    }
+    body { display: flex; height: 100vh; margin: 0; font-family: sans-serif; }
+    .sidebar { width: 250px; background: #f0f0f0; padding: 1rem; overflow-y: auto; }
+    .chat-container { flex: 1; display: flex; flex-direction: column; padding: 1rem; }
+    .messages { flex: 1; border: 1px solid #ccc; padding: 1rem; overflow-y: auto; margin-bottom: 1rem; }
+    .message { margin-bottom: 1rem; }
+    .sender { font-weight: bold; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Inbox</h1>
-    <div class="message-list" id="inbox"></div>
-
-    <h2>Send Message</h2>
-    <form id="messageForm">
-      <label for="receiver_id">Receiver ID:</label>
-      <input type="text" id="receiver_id" required />
-
-      <label for="content">Message:</label>
-      <textarea id="content" rows="4" required></textarea>
-
+  <div class="sidebar">
+    <h3>Recent</h3>
+    <div id="recent-users"></div>
+    <input type="text" id="search" placeholder="Search users...">
+    <div id="search-results"></div>
+  </div>
+  <div class="chat-container">
+    <div class="messages" id="chat-box"></div>
+    <form id="chat-form">
+      <input type="hidden" id="receiver-id">
+      <textarea id="chat-input" rows="3" style="width: 100%;"></textarea>
       <button type="submit">Send</button>
     </form>
-
-    <p id="status" class=""></p>
   </div>
 
-  <script>
-    async function loadInbox() {
-      try {
-        const response = await fetch("/messages/inbox");
-        if (!response.ok) throw new Error("Failed to load inbox");
-        const messages = await response.json();
+<script>
+  let selectedUserId = null;
 
-        const inbox = document.getElementById("inbox");
-        inbox.innerHTML = "";
+  async function loadConversation(userId) {
+    selectedUserId = userId;
+    document.getElementById('receiver-id').value = userId;
 
-        if (messages.length === 0) {
-          inbox.innerHTML = "<p>No messages</p>";
-          return;
-        }
+    const response = await fetch(`/messages/thread/${userId}`);
+    const data = await response.json();
+    const box = document.getElementById('chat-box');
+    box.innerHTML = "";
 
-        messages.forEach(msg => {
-          const item = document.createElement("div");
-          item.className = "message-item";
-          item.innerHTML = `<strong>From:</strong> ${msg.sender_id}<br><strong>Message:</strong> ${msg.content}<br><small>${new Date(msg.timestamp).toLocaleString()}</small>`;
-          inbox.appendChild(item);
-        });
-      } catch (err) {
-        console.error(err);
-        document.getElementById("inbox").innerHTML = "<p class='error'>Failed to load messages</p>";
-      }
+    if (data.length === 0) {
+      box.innerHTML = "<p>No messages yet.</p>";
+      return;
     }
 
-    async function sendMessage(event) {
-      event.preventDefault();
+    data.forEach(msg => {
+      const from = msg.sender.user_id === userId ? msg.sender.username : "You";
+      box.innerHTML += `
+        <div class='message'>
+          <div class='sender'>${from}:</div>
+          <div>${msg.content}</div>
+          <small>${new Date(msg.timestamp).toLocaleString()}</small>
+        </div>`;
+    });
 
-      const receiver_id = document.getElementById("receiver_id").value;
-      const content = document.getElementById("content").value;
-      const statusEl = document.getElementById("status");
+    box.scrollTop = box.scrollHeight;
+  }
 
-      try {
-        const response = await fetch("/messages/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ receiver_id, content })
-        });
+  async function loadRecentUsers() {
+    const res = await fetch('/messages/recent-users');
+    const data = await res.json();
+    const container = document.getElementById('recent-users');
+    container.innerHTML = "";
 
-        const data = await response.json();
+    data.forEach(user => {
+      const btn = document.createElement('button');
+      btn.textContent = user.username;
+      btn.onclick = () => loadConversation(user.user_id);
+      container.appendChild(btn);
+    });
+  }
 
-        if (!response.ok) {
-          throw new Error(data.detail || "Error sending message");
-        }
+  async function searchUsers(q) {
+    const res = await fetch(`/messages/search-users?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    const container = document.getElementById('search-results');
+    container.innerHTML = "";
 
-        statusEl.textContent = "Message sent!";
-        statusEl.className = "success";
+    data.forEach(user => {
+      const btn = document.createElement('button');
+      btn.textContent = user.username;
+      btn.onclick = () => loadConversation(user.user_id);
+      container.appendChild(btn);
+    });
+  }
 
-        document.getElementById("messageForm").reset();
-        await loadInbox();
-      } catch (err) {
-        statusEl.textContent = err.message;
-        statusEl.className = "error";
-      }
-    }
+  document.getElementById('search').addEventListener('input', (e) => {
+    searchUsers(e.target.value);
+  });
 
-    document.getElementById("messageForm").addEventListener("submit", sendMessage);
-    loadInbox();
-  </script>
+  document.getElementById('chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const receiver_id = document.getElementById('receiver-id').value;
+    const content = document.getElementById('chat-input').value;
+
+    if (!receiver_id || !content.trim()) return;
+
+    await fetch('/messages/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receiver_id, content })
+    });
+
+    document.getElementById('chat-input').value = "";
+    await loadConversation(receiver_id);
+  });
+
+  // Initial load
+  loadRecentUsers();
+</script>
+
 </body>
 </html>

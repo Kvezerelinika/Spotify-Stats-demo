@@ -578,7 +578,6 @@ async def get_genre_details(
 
 
 
-# /compare/{user_id_1}/{user_id_2}	
 @app.get("/compare/{user_id_1}/{user_id_2}")
 async def compare_users(
     request: Request,
@@ -636,23 +635,54 @@ async def compare_users(
     top_artists_result = await db.execute(top_artists_stmt)
     top_tracks_result = await db.execute(top_tracks_stmt)
 
-    top_artists_by_user = {user_id_1: [], user_id_2: []}
-    for row in top_artists_result.fetchall():
-        top_artists_by_user[row.user_id].append(dict(row._mapping))
+    top_artists_by_user = {}
+    top_tracks_by_user = {}
 
-    top_tracks_by_user = {user_id_1: [], user_id_2: []}
+    for row in top_artists_result.fetchall():
+        uid = row.user_id
+        if uid not in top_artists_by_user:
+            top_artists_by_user[uid] = []
+        top_artists_by_user[uid].append(dict(row._mapping))
+
     for row in top_tracks_result.fetchall():
-        top_tracks_by_user[row.user_id].append(dict(row._mapping))
+        uid = row.user_id
+        if uid not in top_tracks_by_user:
+            top_tracks_by_user[uid] = []
+        top_tracks_by_user[uid].append(dict(row._mapping))
+
+    # Get list data or empty
+    artists_1 = top_artists_by_user.get(user_id_1, [])
+    artists_2 = top_artists_by_user.get(user_id_2, [])
+    tracks_1 = top_tracks_by_user.get(user_id_1, [])
+    tracks_2 = top_tracks_by_user.get(user_id_2, [])
+
+    # Shared artists
+    ids_1 = {a["artist_id"] for a in artists_1}
+    ids_2 = {a["artist_id"] for a in artists_2}
+    shared_artist_ids = ids_1 & ids_2
+    shared_artists = [a for a in artists_1 if a["artist_id"] in shared_artist_ids]
+    artist_overlap_percent = round(len(shared_artist_ids) / max(len(ids_1 | ids_2), 1) * 100, 1)
+
+    # Shared tracks
+    tid_1 = {t["track_id"] for t in tracks_1}
+    tid_2 = {t["track_id"] for t in tracks_2}
+    shared_track_ids = tid_1 & tid_2
+    shared_tracks = [t for t in tracks_1 if t["track_id"] in shared_track_ids]
+    track_overlap_percent = round(len(shared_track_ids) / max(len(tid_1 | tid_2), 1) * 100, 1)
+
+    has_overlap = bool(shared_artists or shared_tracks)
 
     return templates.TemplateResponse("compare_users.html", {
         "request": request,
         "user_info_1": users_info[user_id_1],
         "user_info_2": users_info[user_id_2],
-        "top_artists_1": top_artists_by_user[user_id_1],
-        "top_artists_2": top_artists_by_user[user_id_2],
-        "top_tracks_1": top_tracks_by_user[user_id_1],
-        "top_tracks_2": top_tracks_by_user[user_id_2],
+        "shared_artists": shared_artists,
+        "shared_tracks": shared_tracks,
+        "artist_overlap_percent": artist_overlap_percent,
+        "track_overlap_percent": track_overlap_percent,
+        "has_overlap": has_overlap
     })
+
 
 
 # /search?q=...	

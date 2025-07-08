@@ -182,6 +182,7 @@ class UserConnection(Base):
 
 class Message(Base):
     __tablename__ = "messages"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     sender_id = Column(String, ForeignKey("users.user_id"), nullable=False)
     receiver_id = Column(String, ForeignKey("users.user_id"), nullable=False)
@@ -189,10 +190,8 @@ class Message(Base):
     timestamp = Column(TIMESTAMP(timezone=True), server_default=func.now())
     is_read = Column(Boolean, default=False)
 
-    sender = relationship("User", foreign_keys=[sender_id])
-    receiver = relationship("User", foreign_keys=[receiver_id])
-    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
-    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+    sender = relationship("User", back_populates="sent_messages", foreign_keys=[sender_id])
+    receiver = relationship("User", back_populates="received_messages", foreign_keys=[receiver_id])
 
 
 
