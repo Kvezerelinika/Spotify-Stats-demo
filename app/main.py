@@ -368,7 +368,7 @@ async def dashboard(request: Request, limit: int = 1000, offset: int = 0, user_d
 
 
 # /users/{user_id}	
-# Endpoint to fetch user profile data
+# Endpoint to fetch user profile data for other users
 @app.get("/users/{user_id}", response_class=HTMLResponse)
 async def get_user_profile(request: Request, user_id: str, db=Depends(get_db_connection)):
     stmt = select(
@@ -884,7 +884,6 @@ async def todays_tops(request: Request, db=Depends(get_db_connection), user_data
     })
 
 #ALL ARTIST LISTENED BY STREAMS
-
 @app.get("/all-artists")
 async def all_artists(request: Request, db=Depends(get_db_connection), user_data: dict = Depends(SpotifyHandler.get_current_user)):
     user_id = user_data["user_id"]
