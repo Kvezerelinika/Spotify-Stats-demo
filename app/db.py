@@ -59,7 +59,8 @@ class User(Base):
     payment_methods = relationship("PaymentMethod", back_populates="user")
     sent_messages = relationship("Message", back_populates="sender", foreign_keys='Message.sender_id', cascade="all, delete-orphan")
     received_messages = relationship("Message", back_populates="receiver", foreign_keys='Message.receiver_id', cascade="all, delete-orphan")
-
+    followings = relationship("UserConnection", foreign_keys="[UserConnection.user_id]", back_populates="user", cascade="all, delete-orphan")
+    followers = relationship("UserConnection", foreign_keys="[UserConnection.friend_id]", back_populates="friend", cascade="all, delete-orphan")
 
 
 class Track(Base):
@@ -177,8 +178,9 @@ class UserConnection(Base):
     friend_id = Column(String, ForeignKey("users.user_id"), primary_key=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    user = relationship("User", foreign_keys=[user_id])
-    friend = relationship("User", foreign_keys=[friend_id])
+    user = relationship("User", foreign_keys=[user_id], back_populates="followings")
+    friend = relationship("User", foreign_keys=[friend_id], back_populates="followers")
+
 
 class Message(Base):
     __tablename__ = "messages"

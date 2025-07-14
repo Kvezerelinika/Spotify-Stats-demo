@@ -42,10 +42,16 @@ async def test_streams_by_month(user_id: str):
 
 async def test_on_this_day(user_id: str):
     async with await get_db_connection() as db:
-        today, tracks = await LogicHandlers.on_this_day_logic(user_id, db)
-        print(f"On {today}, YOU LISTENED TO:")
-        for track in tracks:
-            print("-", track["track_name"], "by", track["artist_name"])
+        date_, tracks = await LogicHandlers.on_this_day_logic(user_id, db)
+        print(f"On {date_}, YOU LISTENED TO:")
+
+        if isinstance(tracks, str):
+            print(tracks)
+        else:
+            for track in tracks:
+                print("-", track["track_name"], "by", track["artist_name"])
+
+
 
 
 user_id = "bxbnsyr2xozh2w6motxczqptv"

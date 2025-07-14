@@ -113,24 +113,34 @@ class LogicHandlers:
         return [dict(month=row.month.strip(), stream_count=row.stream_count) for row in rows]
 
     @staticmethod
-    async def on_this_day_logic(user_id: str, db) -> tuple[date, list[dict]]:
+    async def on_this_day_logic(user_id: str, db) -> tuple[date, list[dict] | str]:
         today = date.today()
+        one_year_ago = today.replace(year=today.year - 1)
 
-        stmt = select(
-            ListeningHistory.track_id,
-            Track.name.label("track_name"),
-            Track.artist_name,
-            Track.album_name,
-            Track.album_image_url,
-            Track.spotify_url,
-            func.date(ListeningHistory.played_at).label("listened_date")
-        ).join(Track, ListeningHistory.track_id == Track.track_id
-        ).where(
-            func.date(ListeningHistory.played_at) == today,
-            ListeningHistory.user_id == user_id
+        stmt = (
+            select(
+                ListeningHistory.track_id,
+                Track.name.label("track_name"),
+                Track.artist_name,
+                Track.album_name,
+                Track.album_image_url,
+                Track.spotify_url,
+                func.date(ListeningHistory.played_at).label("listened_date")
+            )
+            .join(Track, ListeningHistory.track_id == Track.track_id)
+            .where(
+                func.date(ListeningHistory.played_at) == one_year_ago,
+                ListeningHistory.user_id == user_id
+            )
+            .distinct(ListeningHistory.track_id)  # Ensures unique songs
         )
 
         result = await db.execute(stmt)
         rows = result.all()
-        return today, [dict(row._mapping) for row in rows]
+
+        if not rows:
+            return one_year_ago, "No songs were streamed on this day last year."
+
+        return one_year_ago, [dict(row._mapping) for row in rows]
+
 
