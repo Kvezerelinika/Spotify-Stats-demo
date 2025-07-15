@@ -17,8 +17,9 @@ from app.oauth import OAuthSettings, SpotifyOAuth, SpotifyHandler, SpotifyUser
 from app.spotify_api import SpotifyClient
 from app.database import get_db_connection, AsyncSessionLocal
 from app.helpers import MusicDataService, UserMusicUpdater, TokenRefresh
-from app.db import User, Track, Album, Artist, UsersTopTracks, UsersTopArtists
+from app.db import User, Track, Album, Artist, UsersTopTracks, UsersTopArtists, ListeningHistory
 from app.routers import messages
+from app.dependencies import get_current_user
 
 # Function to fetch user data from Spotify
 import httpx
@@ -396,8 +397,8 @@ async def get_user_profile(request: Request, user_id: str, db=Depends(get_db_con
 
 # /tracks/{track_id}
 @app.get("/tracks/{track_id}")
-async def get_track_details(request: Request, track_id: str, db=Depends(get_db_connection)):
-    # Fetch track details from the database
+async def get_track_details(request: Request, track_id: str, db=Depends(get_db_connection), current_user: dict = Depends(get_current_user)):
+    # Fetch track details
     stmt = select(
         Track.track_id,
         Track.name,
@@ -412,9 +413,8 @@ async def get_track_details(request: Request, track_id: str, db=Depends(get_db_c
         Track.album_release_date,
         Track.album_image_url,
         Track.album_name
-
     ).where(Track.track_id == track_id)
-
+    
     result = await db.execute(stmt)
     track_info = result.one_or_none()
 
@@ -423,10 +423,46 @@ async def get_track_details(request: Request, track_id: str, db=Depends(get_db_c
 
     track_info_dict = dict(track_info._mapping)
 
+    # Fetch personal stats if user is logged in
+    personal_stats = None
+    if current_user:
+        user_id = current_user["user_id"]
+        stmt_history = select(ListeningHistory).where(
+            ListeningHistory.track_id == track_id,
+            ListeningHistory.user_id == user_id
+        )
+        history_result = await db.execute(stmt_history)
+        history_entries = history_result.scalars().all()
+
+        if history_entries:
+            total_plays = len(history_entries)
+            last_played = max(entry.played_at for entry in history_entries)
+            first_played = min(entry.played_at for entry in history_entries)
+            unique_days = {entry.played_at.date() for entry in history_entries}
+            days_played = len(unique_days)
+            from collections import Counter
+            most_common_hour = Counter([entry.played_at.hour for entry in history_entries]).most_common(1)
+
+            stmt_total = select(func.count()).where(ListeningHistory.user_id == user_id)
+            total_listens = await db.scalar(stmt_total)
+
+            percentage = (total_plays / total_listens) * 100 if total_listens else 0
+
+            personal_stats = {
+                "total_plays": total_plays,
+                "last_played": last_played,
+                "first_played": first_played,
+                "days_played": days_played,
+                "most_common_hour": most_common_hour[0][0] if most_common_hour else None,
+                "percentage_of_total": round(percentage, 2),
+                
+            }
+
     return templates.TemplateResponse("track_details.html", {
         "request": request,
         "track_info": track_info_dict,
-    })	
+        "personal_stats": personal_stats,
+    })
 
 # /albums/{album_id}	
 @app.get("/albums/{album_id}")

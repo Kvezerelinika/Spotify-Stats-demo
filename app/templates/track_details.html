@@ -31,5 +31,55 @@
         <p><strong>Explicit:</strong> {{ "Yes" if track_info.explicit else "No" }}</p>
         <p><a href="{{ track_info.spotify_url }}" target="_blank">Open in Spotify</a></p>
     </div>
+    {% if personal_stats %}
+        <div class="info">
+            <h3>Your Listening Stats</h3>
+            <p><strong>Total Plays:</strong> {{ personal_stats.total_plays }}</p>
+            <p><strong>First Played:</strong> {{ personal_stats.first_played.strftime('%Y-%m-%d %H:%M') }}</p>
+            <p><strong>Last Played:</strong> {{ personal_stats.last_played.strftime('%Y-%m-%d %H:%M') }}</p>
+            <p><strong>Days Played:</strong> {{ personal_stats.days_played }}</p>
+            {% if personal_stats.most_common_hour %}
+                <p><strong>Most Common Hour:</strong> {{ personal_stats.most_common_hour }}:00</p>
+            {% endif %}
+            {% if personal_stats.percentage_of_total %}
+                <p><strong>Percentage of Your Total Plays:</strong> {{ personal_stats.percentage_of_total }}%</p>
+            {% endif %}
+            <p><strong>Total Listens:</strong> {{ personal_stats.total_listens }}</p>
+            <p><strong>Unique Days Played:</strong> {{ personal_stats.unique_days_played }}</p>
+            <p><strong>Average Plays per Day:</strong> {{ personal_stats.average_plays_per_day }}</p>
+            <p><strong>Average Plays per Week:</strong> {{ personal_stats.average_plays_per_week }}</p>
+            <p><strong>Average Plays per Month:</strong> {{ personal_stats.average_plays_per_month }}</p>
+            <p><strong>Average Plays per Year:</strong> {{ personal_stats.average_plays_per_year }}</p>
+            <p><strong>Most Common Day of Week:</strong> {{ personal_stats.most_common_day_of_week }}</p>
+            <p><strong>Most Common Time of Day:</strong> {{ personal_stats.most_common_time_of_day }}</p>
+            <p><strong>Peak Listening Time:</strong> {{ personal_stats.peak_listening_time }}</p>
+            <p><strong>Average Listening Session Length:</strong> {{ personal_stats.average_session_length }} minutes</p>
+            <p><strong>Longest Listening Session:</strong> {{ personal_stats.longest_session_length }} minutes</p>
+            <p><strong>Most Active Listening Period:</strong> {{ personal_stats.most_active_period }}</p>
+            <p><strong>Least Active Listening Period:</strong> {{ personal_stats.least_active_period }}</p>
+            <p><strong>Listening Trends:</strong> {{ personal_stats.listening_trends }}</p>
+            <p><strong>Listening Habits:</strong> {{ personal_stats.listening_habits }}</p>
+            <p><strong>Listening Patterns:</strong> {{ personal_stats.listening_patterns }}</p>
+            <p><strong>Listening Preferences:</strong> {{ personal_stats.listening_preferences }}</p>
+            <p><strong>Listening History:</strong> {{ personal_stats.listening_history }}</p>
+            <p><strong>Listening Milestones:</strong> {{ personal_stats.listening_milestones }}</p>
+            <p><strong>Listening Achievements:</strong> {{ personal_stats.listening_achievements }}</p>
+            <p><strong>Listening Goals:</strong> {{ personal_stats.listening_goals }}</p>
+            <p><strong>Listening Challenges:</strong> {{ personal_stats.listening_challenges }}</p>
+            <p><strong>Listening Insights:</strong> {{ personal_stats.listening_insights }}</p>
+            <p><strong>Listening Recommendations:</strong> {{ personal_stats.listening_recommendations }}</p>
+        </div>
+    {% else %}
+        <div class="info">
+            <h3>Your Listening Stats</h3>
+            <p>You haven't streamed this track yet.</p>
+        </div>
+    {% endif %}
+    {% if personal_stats is none %}
+        <div class="info">
+            <h3>Your Listening Stats</h3>
+            <p><a href="/login">Log in</a> to see your listening stats for this track.</p>
+        </div>
+    {% endif %}
 </body>
 </html>
