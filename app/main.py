@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import update, select
+from typing import Optional
 
 
 # Import Spotify helper functions
@@ -465,9 +466,11 @@ async def get_track_details(request: Request, track_id: str, db=Depends(get_db_c
     })
 
 # /albums/{album_id}	
+from sqlalchemy import func
+
 @app.get("/albums/{album_id}")
-async def get_album_details(request: Request, album_id: str, db=Depends(get_db_connection)):
-    # Fetch album details from the database
+async def get_album_details(request: Request, album_id: str, db=Depends(get_db_connection), user_id: Optional[str] = None):
+    # Basic album info
     stmt = (
         select(
             Album.album_id,
@@ -482,7 +485,6 @@ async def get_album_details(request: Request, album_id: str, db=Depends(get_db_c
         .join(Artist, Album.artist_id == Artist.artist_id)
         .where(Album.album_id == album_id)
     )
-
     result = await db.execute(stmt)
     album_info = result.one_or_none()
 
@@ -491,10 +493,69 @@ async def get_album_details(request: Request, album_id: str, db=Depends(get_db_c
 
     album_info_dict = dict(album_info._mapping)
 
+    # --- Additional Stats ---
+    # 1. Get track IDs for this album
+    track_stmt = select(Track.track_id, Track.name).where(Track.album_id == album_id)
+    tracks_result = await db.execute(track_stmt)
+    tracks = tracks_result.fetchall()
+    track_ids = [t.track_id for t in tracks]
+    track_names = {t.track_id: t.name for t in tracks}
+
+    # 2. Global stats
+    global_listens_stmt = (
+        select(
+            ListeningHistory.track_id,
+            func.count().label("listen_count")
+        )
+        .where(ListeningHistory.track_id.in_(track_ids))
+        .group_by(ListeningHistory.track_id)
+        .order_by(func.count().desc())
+    )
+    global_listens_result = await db.execute(global_listens_stmt)
+    global_listens = global_listens_result.fetchall()
+
+    # Most played track globally
+    most_played_track_id = global_listens[0].track_id if global_listens else None
+    most_played_track_name = track_names.get(most_played_track_id, "N/A") if most_played_track_id else "N/A"
+    total_album_listens = sum([r.listen_count for r in global_listens])
+
+    # 3. User-specific stats (if user_id is provided, e.g., from session)
+    user_stats = {}
+    if user_id:
+        user_listens_stmt = (
+            select(
+                ListeningHistory.track_id,
+                func.count().label("play_count"),
+                func.min(ListeningHistory.played_at).label("first_play"),
+                func.max(ListeningHistory.played_at).label("last_play")
+            )
+            .where(
+                ListeningHistory.user_id == user_id,
+                ListeningHistory.track_id.in_(track_ids)
+            )
+            .group_by(ListeningHistory.track_id)
+            .order_by(func.count().desc())
+        )
+        user_listens_result = await db.execute(user_listens_stmt)
+        user_listens = user_listens_result.fetchall()
+
+        if user_listens:
+            favorite_track_id = user_listens[0].track_id
+            user_stats = {
+                "total_listens": sum([r.play_count for r in user_listens]),
+                "first_play": min([r.first_play for r in user_listens]),
+                "last_play": max([r.last_play for r in user_listens]),
+                "favorite_track": track_names.get(favorite_track_id)
+            }
+
     return templates.TemplateResponse("album_details.html", {
         "request": request,
         "album_info": album_info_dict,
+        "most_played_track": most_played_track_name,
+        "total_album_listens": total_album_listens,
+        "user_stats": user_stats,
     })
+
 
 # /artists/{artist_id}	
 @app.get("/artists/{artist_id}")

@@ -61,5 +61,18 @@
         </div>
     </div>
 
+    <hr>
+    <h2>Album Stats</h2>
+    <p><strong>Total Plays (All Users):</strong> {{ total_album_listens }}</p>
+    <p><strong>Most Played Track:</strong> {{ most_played_track }}</p>
+
+    {% if user_stats %}
+        <hr>
+        <h2>Your Listening Stats</h2>
+        <p><strong>Total Plays:</strong> {{ user_stats.total_listens }}</p>
+        <p><strong>First Time You Played:</strong> {{ user_stats.first_play.strftime('%Y-%m-%d %H:%M') }}</p>
+        <p><strong>Last Time You Played:</strong> {{ user_stats.last_play.strftime('%Y-%m-%d %H:%M') }}</p>
+        <p><strong>Your Favorite Track:</strong> {{ user_stats.favorite_track }}</p>
+    {% endif %}
 </body>
 </html>
