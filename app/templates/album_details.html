@@ -1,16 +1,23 @@
-<!-- templates/album_details.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>{{ album_info.album_name }} - Album Details</title>
     <style>
         body {
-            font-family: sans-serif;
-            max-width: 800px;
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: #fff;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f9f9f9;
+        }
+        a {
+            color: #1db954;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
         }
         .album-header {
             display: flex;
@@ -22,57 +29,134 @@
             height: 220px;
             border-radius: 12px;
             object-fit: cover;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.7);
         }
         .album-meta h1 {
             margin: 0;
+            font-size: 2rem;
         }
         .album-meta p {
             margin: 6px 0;
         }
-        .spotify-link {
-            margin-top: 12px;
-        }
         .spotify-link a {
             background-color: #1DB954;
-            color: white;
-            padding: 8px 16px;
-            text-decoration: none;
-            border-radius: 4px;
+            padding: 10px 16px;
+            border-radius: 6px;
             font-weight: bold;
+            display: inline-block;
+            margin-top: 10px;
         }
         .spotify-link a:hover {
             background-color: #17a84b;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #444;
+            margin: 25px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+            text-align: left;
+        }
+        th {
+            background-color: #222;
+        }
+        .top-listeners {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .listener-card {
+            background-color: #222;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            min-width: 120px;
+            cursor: default;
+        }
+        .listener-card img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
         }
     </style>
 </head>
 <body>
 
     <div class="album-header">
-        <img src="{{ album_info.image_url or '/static/default-album.png' }}" alt="Album Cover" class="album-cover">
+        <img src="{{ album_info.image_url or '/static/default-album.png' }}" alt="Album Cover" class="album-cover" />
         <div class="album-meta">
             <h1>{{ album_info.album_name }}</h1>
             <p><strong>Artist:</strong> <a href="/artists/{{ album_info.artist_id }}">{{ album_info.artist_name }}</a></p>
             <p><strong>Release Date:</strong> {{ album_info.release_date or "Unknown" }}</p>
             <p><strong>Total Tracks:</strong> {{ album_info.total_tracks }}</p>
+            <p><strong>Label:</strong> {{ album_info.label or "N/A" }}</p>
+            <p><strong>Popularity:</strong> {{ album_info.popularity or "N/A" }}</p>
             <div class="spotify-link">
-                <a href="{{ album_info.spotify_url }}" target="_blank">Open in Spotify</a>
+                <a href="{{ album_info.spotify_url }}" target="_blank" rel="noopener noreferrer">Open in Spotify</a>
             </div>
         </div>
     </div>
 
-    <hr>
+    <hr />
+
     <h2>Album Stats</h2>
     <p><strong>Total Plays (All Users):</strong> {{ total_album_listens }}</p>
+    <p><strong>Unique Listeners:</strong> {{ unique_album_listeners }}</p>
+    <p><strong>Average Plays per Listener:</strong> {{ "%.2f"|format(avg_plays_per_listener) }}</p>
     <p><strong>Most Played Track:</strong> {{ most_played_track }}</p>
 
-    {% if user_stats %}
-        <hr>
-        <h2>Your Listening Stats</h2>
-        <p><strong>Total Plays:</strong> {{ user_stats.total_listens }}</p>
-        <p><strong>First Time You Played:</strong> {{ user_stats.first_play.strftime('%Y-%m-%d %H:%M') }}</p>
-        <p><strong>Last Time You Played:</strong> {{ user_stats.last_play.strftime('%Y-%m-%d %H:%M') }}</p>
-        <p><strong>Your Favorite Track:</strong> {{ user_stats.favorite_track }}</p>
+    <h3>Track List</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Track</th>
+                <th>Duration</th>
+                <th>Total Plays</th>
+                <th>Unique Listeners</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for track in track_breakdown %}
+            <tr>
+                <td>{{ track.track_name }}</td>
+                <td>{{ (track.duration_ms // 60000) }}:{% set sec = (track.duration_ms // 1000) %}{{ '%02d' % (sec % 60) }}</td>
+                <td>{{ track.listen_count }}</td>
+                <td>{{ track.unique_listeners }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if top_listeners %}
+    <h3>Top Listeners</h3>
+    <div class="top-listeners">
+        {% for listener in top_listeners %}
+        <div class="listener-card" title="{{ listener.display_name }}">
+            <img src="{{ listener.image_url or '/static/default-user.png' }}" alt="{{ listener.display_name }}" />
+            <p>{{ listener.display_name }}</p>
+            <p>Plays: {{ listener.total_plays }}</p>
+        </div>
+        {% endfor %}
+    </div>
     {% endif %}
+
+    {% if user_stats %}
+    <hr />
+    <h2>Your Listening Stats</h2>
+    <p><strong>Total Plays:</strong> {{ user_stats.total_listens }}</p>
+    <p><strong>First Time You Played:</strong> {{ user_stats.first_play.strftime('%Y-%m-%d %H:%M') }}</p>
+    <p><strong>Last Time You Played:</strong> {{ user_stats.last_play.strftime('%Y-%m-%d %H:%M') }}</p>
+    <p><strong>Your Favorite Track:</strong> {{ user_stats.favorite_track }}</p>
+    {% endif %}
+
 </body>
 </html>

@@ -465,12 +465,18 @@ async def get_track_details(request: Request, track_id: str, db=Depends(get_db_c
         "personal_stats": personal_stats,
     })
 
-# /albums/{album_id}	
-from sqlalchemy import func
+from fastapi import FastAPI, Request, Depends, HTTPException
+from sqlalchemy import select, func, distinct, desc
+from typing import Optional
 
 @app.get("/albums/{album_id}")
-async def get_album_details(request: Request, album_id: str, db=Depends(get_db_connection), user_id: Optional[str] = None):
-    # Basic album info
+async def get_album_details(
+    request: Request,
+    album_id: str,
+    db=Depends(get_db_connection),
+    user_id: Optional[str] = None
+):
+    # --- 1. Basic Album Info ---
     stmt = (
         select(
             Album.album_id,
@@ -479,8 +485,11 @@ async def get_album_details(request: Request, album_id: str, db=Depends(get_db_c
             Album.image_url,
             Album.spotify_url,
             Album.total_tracks,
+            Album.popularity,
+            Album.label,
             Artist.artist_id,
-            Artist.name.label("artist_name")
+            Artist.name.label("artist_name"),
+            Artist.image_url.label("artist_image")
         )
         .join(Artist, Album.artist_id == Artist.artist_id)
         .where(Album.album_id == album_id)
@@ -493,33 +502,56 @@ async def get_album_details(request: Request, album_id: str, db=Depends(get_db_c
 
     album_info_dict = dict(album_info._mapping)
 
-    # --- Additional Stats ---
-    # 1. Get track IDs for this album
-    track_stmt = select(Track.track_id, Track.name).where(Track.album_id == album_id)
+    # --- 2. Tracks ---
+    track_stmt = (
+        select(Track.track_id, Track.name, Track.duration_ms)
+        .where(Track.album_id == album_id)
+        .order_by(Track.track_number)
+    )
     tracks_result = await db.execute(track_stmt)
     tracks = tracks_result.fetchall()
     track_ids = [t.track_id for t in tracks]
     track_names = {t.track_id: t.name for t in tracks}
 
-    # 2. Global stats
-    global_listens_stmt = (
+    # --- 3. Global Stats per track ---
+    global_stats_stmt = (
         select(
             ListeningHistory.track_id,
-            func.count().label("listen_count")
+            func.count().label("listen_count"),
+            func.count(distinct(ListeningHistory.user_id)).label("unique_listeners")
         )
         .where(ListeningHistory.track_id.in_(track_ids))
         .group_by(ListeningHistory.track_id)
-        .order_by(func.count().desc())
+        .order_by(desc("listen_count"))
     )
-    global_listens_result = await db.execute(global_listens_stmt)
-    global_listens = global_listens_result.fetchall()
+    global_stats_result = await db.execute(global_stats_stmt)
+    global_stats = {r.track_id: dict(r._mapping) for r in global_stats_result}
 
-    # Most played track globally
-    most_played_track_id = global_listens[0].track_id if global_listens else None
-    most_played_track_name = track_names.get(most_played_track_id, "N/A") if most_played_track_id else "N/A"
-    total_album_listens = sum([r.listen_count for r in global_listens])
+    # --- 4. Album-level aggregates ---
+    total_album_listens = sum(stat["listen_count"] for stat in global_stats.values())
+    unique_album_listeners = len(global_stats) and sum(stat["unique_listeners"] for stat in global_stats.values()) or 0
 
-    # 3. User-specific stats (if user_id is provided, e.g., from session)
+    most_played_track_id = max(global_stats, key=lambda tid: global_stats[tid]["listen_count"]) if global_stats else None
+    most_played_track_name = track_names.get(most_played_track_id, "N/A")
+
+    # --- 5. Top Listeners ---
+    top_listeners_stmt = (
+        select(
+            ListeningHistory.user_id,
+            User.display_name,
+            User.image_url,
+            func.count().label("total_plays")
+        )
+        .join(User, ListeningHistory.user_id == User.user_id)
+        .where(ListeningHistory.track_id.in_(track_ids))
+        .group_by(ListeningHistory.user_id, User.display_name, User.image_url)
+        .order_by(desc("total_plays"))
+        .limit(10)
+    )
+    top_listeners_result = await db.execute(top_listeners_stmt)
+    top_listeners = [dict(r._mapping) for r in top_listeners_result]
+
+    # --- 6. User stats if available ---
     user_stats = {}
     if user_id:
         user_listens_stmt = (
@@ -534,7 +566,7 @@ async def get_album_details(request: Request, album_id: str, db=Depends(get_db_c
                 ListeningHistory.track_id.in_(track_ids)
             )
             .group_by(ListeningHistory.track_id)
-            .order_by(func.count().desc())
+            .order_by(desc("play_count"))
         )
         user_listens_result = await db.execute(user_listens_stmt)
         user_listens = user_listens_result.fetchall()
@@ -548,13 +580,33 @@ async def get_album_details(request: Request, album_id: str, db=Depends(get_db_c
                 "favorite_track": track_names.get(favorite_track_id)
             }
 
+    # --- 7. Track breakdown ---
+    track_breakdown = []
+    for t in tracks:
+        stats = global_stats.get(t.track_id, {"listen_count": 0, "unique_listeners": 0})
+        track_breakdown.append({
+            "track_name": t.name,
+            "duration_ms": t.duration_ms,
+            "listen_count": stats["listen_count"],
+            "unique_listeners": stats["unique_listeners"]
+        })
+
     return templates.TemplateResponse("album_details.html", {
         "request": request,
         "album_info": album_info_dict,
         "most_played_track": most_played_track_name,
         "total_album_listens": total_album_listens,
+        "unique_album_listeners": unique_album_listeners,
+        "avg_plays_per_listener": (total_album_listens / unique_album_listeners) if unique_album_listeners else 0,
+        "top_listeners": top_listeners,
+        "track_breakdown": track_breakdown,
         "user_stats": user_stats,
     })
+
+
+
+
+
 
 
 # /artists/{artist_id}	

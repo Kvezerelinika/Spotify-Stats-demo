@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import ARRAY
 from sqlalchemy.sql import func
+from datetime import datetime
+
 
 DATABASE_URL = "postgresql://postgres:Manowar28%40%40@localhost/postgres"
 
@@ -236,3 +238,16 @@ class PaymentMethod(Base):
     added_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="payment_methods")
+
+
+
+
+
+class UserAlbumRating(Base):
+    __tablename__ = "user_album_ratings"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    album_id = Column(Integer, ForeignKey("albums.id"), nullable=False)
+    rating = Column(Integer, nullable=False)  # 1–5 stars
+    created_at = Column(DateTime, default=datetime.utcnow)
