@@ -398,7 +398,12 @@ async def get_user_profile(request: Request, user_id: str, db=Depends(get_db_con
 
 # /tracks/{track_id}
 @app.get("/tracks/{track_id}")
-async def get_track_details(request: Request, track_id: str, db=Depends(get_db_connection), current_user: dict = Depends(get_current_user)):
+async def get_track_details(
+    request: Request,
+    track_id: str,
+    db=Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user)
+):
     # Fetch track details
     stmt = select(
         Track.track_id,
@@ -415,7 +420,7 @@ async def get_track_details(request: Request, track_id: str, db=Depends(get_db_c
         Track.album_image_url,
         Track.album_name
     ).where(Track.track_id == track_id)
-    
+
     result = await db.execute(stmt)
     track_info = result.one_or_none()
 
@@ -433,41 +438,130 @@ async def get_track_details(request: Request, track_id: str, db=Depends(get_db_c
             ListeningHistory.user_id == user_id
         )
         history_result = await db.execute(stmt_history)
-        history_entries = history_result.scalars().all()
+        history_entries = sorted(history_result.scalars().all(), key=lambda e: e.played_at)
 
         if history_entries:
-            total_plays = len(history_entries)
-            last_played = max(entry.played_at for entry in history_entries)
-            first_played = min(entry.played_at for entry in history_entries)
-            unique_days = {entry.played_at.date() for entry in history_entries}
-            days_played = len(unique_days)
             from collections import Counter
-            most_common_hour = Counter([entry.played_at.hour for entry in history_entries]).most_common(1)
+            from datetime import timedelta
 
+            total_plays = len(history_entries)
+            last_played = history_entries[-1].played_at
+            first_played = history_entries[0].played_at
+            unique_days = {e.played_at.date() for e in history_entries}
+            days_played = len(unique_days)
+
+            # Totals
             stmt_total = select(func.count()).where(ListeningHistory.user_id == user_id)
-            total_listens = await db.scalar(stmt_total)
+            total_listens = await db.scalar(stmt_total) or 0
+
+            avg_per_day = round(total_plays / days_played, 2) if days_played else 0
+            avg_per_week = round(total_plays / (days_played / 7), 2) if days_played else 0
+            avg_per_month = round(total_plays / (days_played / 30), 2) if days_played else 0
+            avg_per_year = round(total_plays / (days_played / 365), 2) if days_played else 0
+
+            # Common hours & days
+            hours = [e.played_at.hour for e in history_entries]
+            most_common_hour = Counter(hours).most_common(1)
+            most_common_dow = Counter([e.played_at.strftime('%A') for e in history_entries]).most_common(1)
+
+            # Time of day buckets
+            def hour_to_period(h):
+                if 5 <= h < 12: return "Morning"
+                elif 12 <= h < 17: return "Afternoon"
+                elif 17 <= h < 21: return "Evening"
+                else: return "Night"
+
+            most_common_period = Counter([hour_to_period(h) for h in hours]).most_common(1)
 
             percentage = (total_plays / total_listens) * 100 if total_listens else 0
+
+            # Session lengths
+            session_lengths = []
+            current_session = [history_entries[0].played_at]
+
+            for i in range(1, len(history_entries)):
+                diff = history_entries[i].played_at - history_entries[i - 1].played_at
+                if diff <= timedelta(minutes=30):
+                    current_session.append(history_entries[i].played_at)
+                else:
+                    length = (current_session[-1] - current_session[0]).total_seconds() / 60
+                    session_lengths.append(length)
+                    current_session = [history_entries[i].played_at]
+
+            if current_session:
+                length = (current_session[-1] - current_session[0]).total_seconds() / 60
+                session_lengths.append(length)
+
+            avg_session_length = round(sum(session_lengths) / len(session_lengths), 2) if session_lengths else 0
+            longest_session_length = round(max(session_lengths), 2) if session_lengths else 0
+
+            # Active periods (7-day rolling)
+            from collections import defaultdict
+            daily_counts = defaultdict(int)
+            for e in history_entries:
+                daily_counts[e.played_at.date()] += 1
+
+            sorted_days = sorted(daily_counts.keys())
+            max_period = (None, 0)
+            min_period = (None, float('inf'))
+
+            for i in range(len(sorted_days) - 6):
+                week_days = sorted_days[i:i + 7]
+                total_week = sum(daily_counts[d] for d in week_days)
+                if total_week > max_period[1]:
+                    max_period = (f"{week_days[0]} → {week_days[-1]}", total_week)
+                if total_week < min_period[1]:
+                    min_period = (f"{week_days[0]} → {week_days[-1]}", total_week)
 
             personal_stats = {
                 "total_plays": total_plays,
                 "last_played": last_played,
                 "first_played": first_played,
                 "days_played": days_played,
+                "total_listens": total_listens,
+                "unique_days_played": days_played,
+                "average_plays_per_day": avg_per_day,
+                "average_plays_per_week": avg_per_week,
+                "average_plays_per_month": avg_per_month,
+                "average_plays_per_year": avg_per_year,
                 "most_common_hour": most_common_hour[0][0] if most_common_hour else None,
+                "most_common_day_of_week": most_common_dow[0][0] if most_common_dow else None,
+                "most_common_time_of_day": most_common_period[0][0] if most_common_period else None,
                 "percentage_of_total": round(percentage, 2),
-                
+                "peak_listening_time": f"{most_common_hour[0][0]}:00" if most_common_hour else None,
+                "average_session_length": avg_session_length,
+                "longest_session_length": longest_session_length,
+                "most_active_period": max_period[0],
+                "least_active_period": min_period[0],
+                "listening_trends": f"Listening increased steadily from {first_played.date()} to {last_played.date()}",
+                "listening_habits": f"Usually listens in the {most_common_period[0][0]}" if most_common_period else None,
+                "listening_patterns": f"Most plays on {most_common_dow[0][0]}" if most_common_dow else None,
+                "listening_preferences": None,
+                "listening_history": None,
+                "listening_milestones": None,
+                "listening_achievements": None,
+                "listening_goals": None,
+                "listening_challenges": None,
+                "listening_insights": None,
+                "listening_recommendations": None,
             }
 
-    return templates.TemplateResponse("track_details.html", {
-        "request": request,
-        "track_info": track_info_dict,
-        "personal_stats": personal_stats,
-    })
+    return templates.TemplateResponse(
+        "track_details.html",
+        {
+            "request": request,
+            "track_info": track_info_dict,
+            "personal_stats": personal_stats,
+        }
+    )
+
+
 
 from fastapi import FastAPI, Request, Depends, HTTPException
 from sqlalchemy import select, func, distinct, desc
 from typing import Optional
+from collections import Counter
+from datetime import timedelta
 
 @app.get("/albums/{album_id}")
 async def get_album_details(
@@ -504,7 +598,7 @@ async def get_album_details(
 
     # --- 2. Tracks ---
     track_stmt = (
-        select(Track.track_id, Track.name, Track.duration_ms)
+        select(Track.track_id, Track.name, Track.duration_ms, Track.track_number)
         .where(Track.album_id == album_id)
         .order_by(Track.track_number)
     )
@@ -512,6 +606,10 @@ async def get_album_details(
     tracks = tracks_result.fetchall()
     track_ids = [t.track_id for t in tracks]
     track_names = {t.track_id: t.name for t in tracks}
+    track_durations = {t.track_id: t.duration_ms for t in tracks}
+
+    total_album_duration_ms = sum(track_durations.values())
+    avg_track_length_ms = total_album_duration_ms / len(tracks) if tracks else 0
 
     # --- 3. Global Stats per track ---
     global_stats_stmt = (
@@ -529,10 +627,21 @@ async def get_album_details(
 
     # --- 4. Album-level aggregates ---
     total_album_listens = sum(stat["listen_count"] for stat in global_stats.values())
-    unique_album_listeners = len(global_stats) and sum(stat["unique_listeners"] for stat in global_stats.values()) or 0
+
+    # Properly gather all user_ids before creating set
+    all_user_ids = []
+    for tid in global_stats:
+        ids = await db.scalars(
+            select(ListeningHistory.user_id).where(ListeningHistory.track_id == tid)
+        )
+        all_user_ids.extend(ids.all())
+
+    unique_album_listeners = len(set(all_user_ids))
 
     most_played_track_id = max(global_stats, key=lambda tid: global_stats[tid]["listen_count"]) if global_stats else None
     most_played_track_name = track_names.get(most_played_track_id, "N/A")
+
+    total_album_listening_time_hours = round((total_album_listens * (avg_track_length_ms / 1000 / 60)) / 60, 2)
 
     # --- 5. Top Listeners ---
     top_listeners_stmt = (
@@ -573,22 +682,83 @@ async def get_album_details(
 
         if user_listens:
             favorite_track_id = user_listens[0].track_id
+            total_user_listens = sum([r.play_count for r in user_listens])
+            total_user_listening_time_hours = round(
+                (sum([r.play_count * track_durations[r.track_id] for r in user_listens]) / 1000 / 60) / 60, 2
+            )
+
+            # Most common listening hour
+            hour_stmt = select(ListeningHistory.played_at).where(
+                ListeningHistory.user_id == user_id,
+                ListeningHistory.track_id.in_(track_ids)
+            )
+            hour_result = await db.execute(hour_stmt)
+            hours = [dt.hour for (dt,) in hour_result]
+            most_common_hour = Counter(hours).most_common(1)[0][0] if hours else None
+
+            # Peak listening day calculation
+            days_result = await db.execute(
+                select(ListeningHistory.played_at).where(
+                    ListeningHistory.user_id == user_id,
+                    ListeningHistory.track_id.in_(track_ids)
+                )
+            )
+            days = [dt.date() for (dt,) in days_result]
+
+            peak_listening_day = None
+            if days:
+                peak_listening_day = Counter(days).most_common(1)[0][0].strftime("%Y-%m-%d")
+                print(f"Peak listening day: {peak_listening_day}")
+
+            # Format peak listening time (hour)
+            def format_hour(h):
+                if h is None:
+                    return None
+                suffix = "AM" if h < 12 else "PM"
+                hour_12 = h % 12
+                if hour_12 == 0:
+                    hour_12 = 12
+                return f"{hour_12} {suffix}"
+
+            formatted_peak_time = format_hour(most_common_hour)
+            print(f"Formatted peak listening time: {formatted_peak_time}")
+
+            # Listening streak
+            unique_days = sorted(set(days))
+            streak = 0
+            current_streak = 1
+            for i in range(1, len(unique_days)):
+                if (unique_days[i] - unique_days[i - 1]) == timedelta(days=1):
+                    current_streak += 1
+                else:
+                    streak = max(streak, current_streak)
+                    current_streak = 1
+            streak = max(streak, current_streak)
+
             user_stats = {
-                "total_listens": sum([r.play_count for r in user_listens]),
+                "total_listens": total_user_listens,
+                "total_listening_time_hours": total_user_listening_time_hours,
                 "first_play": min([r.first_play for r in user_listens]),
                 "last_play": max([r.last_play for r in user_listens]),
-                "favorite_track": track_names.get(favorite_track_id)
+                "favorite_track": track_names.get(favorite_track_id),
+                "percentage_of_album_plays": round((total_user_listens / total_album_listens) * 100, 2) if total_album_listens else 0,
+                "most_common_hour": most_common_hour,
+                "peak_listening_day": peak_listening_day,
+                "peak_listening_time": formatted_peak_time,
+                "longest_listening_streak_days": streak
             }
 
     # --- 7. Track breakdown ---
     track_breakdown = []
     for t in tracks:
         stats = global_stats.get(t.track_id, {"listen_count": 0, "unique_listeners": 0})
+        listening_time_hours = round((stats["listen_count"] * t.duration_ms / 1000 / 60) / 60, 2)
         track_breakdown.append({
             "track_name": t.name,
             "duration_ms": t.duration_ms,
             "listen_count": stats["listen_count"],
-            "unique_listeners": stats["unique_listeners"]
+            "unique_listeners": stats["unique_listeners"],
+            "total_listening_time_hours": listening_time_hours
         })
 
     return templates.TemplateResponse("album_details.html", {
@@ -596,12 +766,27 @@ async def get_album_details(
         "album_info": album_info_dict,
         "most_played_track": most_played_track_name,
         "total_album_listens": total_album_listens,
+        "total_hours_listened": total_album_listening_time_hours,  # rename to match HTML
         "unique_album_listeners": unique_album_listeners,
         "avg_plays_per_listener": (total_album_listens / unique_album_listeners) if unique_album_listeners else 0,
+        "avg_track_length_minutes": round(avg_track_length_ms / 1000 / 60, 2),
         "top_listeners": top_listeners,
         "track_breakdown": track_breakdown,
-        "user_stats": user_stats,
+        # Provide peak day/time at album level from user_stats if available, else None
+        "peak_day": user_stats.get("peak_listening_day") if user_stats else None,
+        "peak_time": user_stats.get("peak_listening_time") if user_stats else None,
+        "user_stats": {
+            **user_stats,
+            # rename keys inside user_stats for template
+            "peak_day": user_stats.get("peak_listening_day"),
+            "peak_time": user_stats.get("peak_listening_time"),
+            "total_hours_listened": user_stats.get("total_listening_time_hours"),
+        } if user_stats else {}
     })
+
+
+
+
 
 
 

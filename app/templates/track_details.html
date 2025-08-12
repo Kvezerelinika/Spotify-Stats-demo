@@ -5,35 +5,102 @@
     <meta charset="UTF-8">
     <title>{{ track_info.name }} - Track Details</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .track-cover { width: 200px; height: 200px; border-radius: 12px; object-fit: cover; }
-        .header { display: flex; align-items: center; gap: 20px; }
-        .info { margin-top: 20px; }
-        .info p { margin: 4px 0; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: #fff;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        a {
+            color: #1db954;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .track-header {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .track-cover {
+            width: 220px;
+            height: 220px;
+            border-radius: 12px;
+            object-fit: cover;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.7);
+        }
+        .track-meta h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+        .track-meta p {
+            margin: 6px 0;
+        }
+        .spotify-link a {
+            background-color: #1DB954;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .spotify-link a:hover {
+            background-color: #17a84b;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #444;
+            margin: 25px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+            text-align: left;
+        }
+        th {
+            background-color: #222;
+        }
+        .info-section {
+            margin-top: 20px;
+        }
+        .info-section p {
+            margin: 4px 0;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
+
+    <div class="track-header">
         <img src="{{ track_info.album_image_url or '/static/default-album.png' }}" alt="Album Cover" class="track-cover">
-        <div>
+        <div class="track-meta">
             <h1>{{ track_info.name }}</h1>
             <p><strong>Artist:</strong> <a href="/artists/{{ track_info.artist_id }}">{{ track_info.artist_name }}</a></p>
             <p><strong>Album:</strong> <a href="/albums/{{ track_info.album_id }}">{{ track_info.album_name }}</a></p>
             <p><strong>Release Date:</strong> {{ track_info.album_release_date or "N/A" }}</p>
+            <p><strong>Track Number:</strong> {{ track_info.track_number }}</p>
+            <p><strong>Duration:</strong> {{ (track_info.duration_ms // 60000) }}:{{ '%02d' % ((track_info.duration_ms // 1000) % 60) }} minutes</p>
+            <p><strong>Popularity:</strong> {{ track_info.popularity }}</p>
+            <p><strong>Explicit:</strong> {{ "Yes" if track_info.explicit else "No" }}</p>
+            <div class="spotify-link">
+                <a href="{{ track_info.spotify_url }}" target="_blank">Open in Spotify</a>
+            </div>
         </div>
     </div>
 
-    <div class="info">
-        <h3>Track Info</h3>
-        <p><strong>Track Number:</strong> {{ track_info.track_number }}</p>
-        <p><strong>Duration:</strong> {{ (track_info.duration_ms // 60000) }}:{{ '%02d' % ((track_info.duration_ms // 1000) % 60) }} minutes</p>
-        <p><strong>Popularity:</strong> {{ track_info.popularity }}</p>
-        <p><strong>Explicit:</strong> {{ "Yes" if track_info.explicit else "No" }}</p>
-        <p><a href="{{ track_info.spotify_url }}" target="_blank">Open in Spotify</a></p>
-    </div>
+    <hr>
+
     {% if personal_stats %}
-        <div class="info">
-            <h3>Your Listening Stats</h3>
+        <div class="info-section">
+            <h2>Your Listening Stats</h2>
             <p><strong>Total Plays:</strong> {{ personal_stats.total_plays }}</p>
             <p><strong>First Played:</strong> {{ personal_stats.first_played.strftime('%Y-%m-%d %H:%M') }}</p>
             <p><strong>Last Played:</strong> {{ personal_stats.last_played.strftime('%Y-%m-%d %H:%M') }}</p>
@@ -69,17 +136,17 @@
             <p><strong>Listening Insights:</strong> {{ personal_stats.listening_insights }}</p>
             <p><strong>Listening Recommendations:</strong> {{ personal_stats.listening_recommendations }}</p>
         </div>
-    {% else %}
-        <div class="info">
-            <h3>Your Listening Stats</h3>
+    {% elif personal_stats is not none %}
+        <div class="info-section">
+            <h2>Your Listening Stats</h2>
             <p>You haven't streamed this track yet.</p>
         </div>
-    {% endif %}
-    {% if personal_stats is none %}
-        <div class="info">
-            <h3>Your Listening Stats</h3>
+    {% else %}
+        <div class="info-section">
+            <h2>Your Listening Stats</h2>
             <p><a href="/login">Log in</a> to see your listening stats for this track.</p>
         </div>
     {% endif %}
+
 </body>
 </html>

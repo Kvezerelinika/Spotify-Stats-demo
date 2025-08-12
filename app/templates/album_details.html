@@ -40,6 +40,7 @@
         }
         .spotify-link a {
             background-color: #1DB954;
+            color: white;
             padding: 10px 16px;
             border-radius: 6px;
             font-weight: bold;
@@ -87,10 +88,32 @@
             border-radius: 50%;
             object-fit: cover;
         }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .stat-card {
+            background-color: #222;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-card h4 {
+            margin: 0 0 4px;
+            font-size: 1.1rem;
+        }
+        .stat-card p {
+            margin: 0;
+            font-size: 1rem;
+            color: #ccc;
+        }
     </style>
 </head>
 <body>
 
+    <!-- Album Header -->
     <div class="album-header">
         <img src="{{ album_info.image_url or '/static/default-album.png' }}" alt="Album Cover" class="album-cover" />
         <div class="album-meta">
@@ -108,12 +131,19 @@
 
     <hr />
 
+    <!-- Album Stats -->
     <h2>Album Stats</h2>
-    <p><strong>Total Plays (All Users):</strong> {{ total_album_listens }}</p>
-    <p><strong>Unique Listeners:</strong> {{ unique_album_listeners }}</p>
-    <p><strong>Average Plays per Listener:</strong> {{ "%.2f"|format(avg_plays_per_listener) }}</p>
-    <p><strong>Most Played Track:</strong> {{ most_played_track }}</p>
+    <div class="stats-grid">
+        <div class="stat-card"><h4>Total Plays</h4><p>{{ total_album_listens }}</p></div>
+        <div class="stat-card"><h4>Unique Listeners</h4><p>{{ unique_album_listeners }}</p></div>
+        <div class="stat-card"><h4>Avg Plays/Listener</h4><p>{{ "%.2f"|format(avg_plays_per_listener) }}</p></div>
+        <div class="stat-card"><h4>Total Hours Listened</h4><p>{{ total_hours_listened }}</p></div>
+        <div class="stat-card"><h4>Most Played Track</h4><p>{{ most_played_track }}</p></div>
+        <div class="stat-card"><h4>Peak Listening Day</h4><p>{{ peak_day or 'N/A' }}</p></div>
+        <div class="stat-card"><h4>Peak Listening Time</h4><p>{{ peak_time or 'N/A' }}</p></div>
+    </div>
 
+    <!-- Track List -->
     <h3>Track List</h3>
     <table>
         <thead>
@@ -136,6 +166,7 @@
         </tbody>
     </table>
 
+    <!-- Top Listeners -->
     {% if top_listeners %}
     <h3>Top Listeners</h3>
     <div class="top-listeners">
@@ -149,13 +180,20 @@
     </div>
     {% endif %}
 
+    <!-- User Stats -->
     {% if user_stats %}
     <hr />
     <h2>Your Listening Stats</h2>
-    <p><strong>Total Plays:</strong> {{ user_stats.total_listens }}</p>
-    <p><strong>First Time You Played:</strong> {{ user_stats.first_play.strftime('%Y-%m-%d %H:%M') }}</p>
-    <p><strong>Last Time You Played:</strong> {{ user_stats.last_play.strftime('%Y-%m-%d %H:%M') }}</p>
-    <p><strong>Your Favorite Track:</strong> {{ user_stats.favorite_track }}</p>
+    <div class="stats-grid">
+        <div class="stat-card"><h4>Total Plays</h4><p>{{ user_stats.total_listens }}</p></div>
+        <div class="stat-card"><h4>Total Hours Listened</h4><p>{{ user_stats.total_hours_listened }}</p></div>
+        <div class="stat-card"><h4>First Played</h4><p>{{ user_stats.first_play.strftime('%Y-%m-%d %H:%M') }}</p></div>
+        <div class="stat-card"><h4>Last Played</h4><p>{{ user_stats.last_play.strftime('%Y-%m-%d %H:%M') }}</p></div>
+        <div class="stat-card"><h4>Favorite Track</h4><p>{{ user_stats.favorite_track }}</p></div>
+        <div class="stat-card"><h4>Your Peak Listening Day</h4><p>{{ user_stats.peak_day or 'N/A' }}</p></div>
+        <div class="stat-card"><h4>Your Peak Listening Time</h4><p>{{ user_stats.peak_time or 'N/A' }}</p></div>
+        <div class="stat-card"><h4>Longest Streak (Days)</h4><p>{{ user_stats.longest_listening_streak_days }}</p></div>
+    </div>
     {% endif %}
 
 </body>
