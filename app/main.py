@@ -794,33 +794,113 @@ async def get_album_details(
 
 
 
-# /artists/{artist_id}	
 @app.get("/artists/{artist_id}")
-async def get_artist_details(request: Request, artist_id: str, db=Depends(get_db_connection)):
-    # Fetch artist details from the database
-    stmt = (
-        select(
-            Artist.artist_id,
-            Artist.name.label("artist_name"),
-            Artist.image_url,
-            Artist.spotify_url,
-            Artist.popularity,
-            Artist.genres
-        )
-        .where(Artist.artist_id == artist_id)
-    )
-
+async def get_artist_details(
+    request: Request,
+    artist_id: str,
+    db=Depends(get_db_connection),
+    current_user: dict = Depends(get_current_user)
+):
+    # --- 1. Basic Artist Info ---
+    stmt = select(
+        Artist.artist_id,
+        Artist.name.label("artist_name"),
+        Artist.image_url,
+        Artist.spotify_url,
+        Artist.popularity,
+        Artist.genres
+    ).where(Artist.artist_id == artist_id)
     result = await db.execute(stmt)
     artist_info = result.one_or_none()
-
     if not artist_info:
         raise HTTPException(status_code=404, detail="Artist not found")
-
     artist_info_dict = dict(artist_info._mapping)
+
+    # --- 2. Albums by this artist ---
+    albums_stmt = select(
+        Album.album_id, Album.name, Album.release_date, Album.image_url
+    ).where(Album.artist_id == artist_id)
+    albums = (await db.execute(albums_stmt)).fetchall()
+
+    # --- 3. Tracks ---
+    tracks_stmt = select(Track.track_id, Track.name, Track.duration_ms, Track.album_id).where(
+        Track.artist_id == artist_id
+    )
+    tracks = (await db.execute(tracks_stmt)).fetchall()
+    track_ids = [t.track_id for t in tracks]
+
+    # --- 4. Global Stats ---
+    global_stats_stmt = (
+        select(
+            ListeningHistory.track_id,
+            func.count().label("listen_count"),
+            func.count(distinct(ListeningHistory.user_id)).label("unique_listeners")
+        )
+        .where(ListeningHistory.track_id.in_(track_ids))
+        .group_by(ListeningHistory.track_id)
+    )
+    global_stats_result = await db.execute(global_stats_stmt)
+    global_stats = {r.track_id: dict(r._mapping) for r in global_stats_result}
+
+    total_artist_plays = sum(stat["listen_count"] for stat in global_stats.values())
+    unique_artist_listeners = len(set(
+        await db.scalars(select(ListeningHistory.user_id).where(ListeningHistory.track_id.in_(track_ids)))
+    ))
+
+    most_played_track_id = max(global_stats, key=lambda tid: global_stats[tid]["listen_count"]) if global_stats else None
+    most_played_track_name = next((t.name for t in tracks if t.track_id == most_played_track_id), "N/A")
+
+    # --- 5. Top Listeners ---
+    top_listeners_stmt = (
+        select(ListeningHistory.user_id, User.display_name, User.image_url, func.count().label("total_plays"))
+        .join(User, ListeningHistory.user_id == User.user_id)
+        .where(ListeningHistory.track_id.in_(track_ids))
+        .group_by(ListeningHistory.user_id, User.display_name, User.image_url)
+        .order_by(desc("total_plays"))
+        .limit(10)
+    )
+    top_listeners = [dict(r._mapping) for r in await db.execute(top_listeners_stmt)]
+
+    # --- 6. User Stats ---
+    user_stats = {}
+    if current_user:
+        user_id = current_user["user_id"]
+        user_stats_stmt = (
+            select(
+                func.count().label("total_plays"),
+                func.min(ListeningHistory.played_at).label("first_play"),
+                func.max(ListeningHistory.played_at).label("last_play")
+            )
+            .where(ListeningHistory.user_id == user_id, ListeningHistory.track_id.in_(track_ids))
+        )
+        user_result = await db.execute(user_stats_stmt)
+        row = user_result.one_or_none()
+        if row and row.total_plays > 0:
+            total_time_hours = round(
+                sum(
+                    global_stats[t.track_id]["listen_count"] * t.duration_ms
+                    for t in tracks
+                    if t.track_id in global_stats
+                ) / 1000 / 60 / 60,
+                2
+            )
+            user_stats = {
+                "total_listens": row.total_plays,
+                "first_play": row.first_play,
+                "last_play": row.last_play,
+                "total_listening_time_hours": total_time_hours,
+                "favorite_track": most_played_track_name
+            }
 
     return templates.TemplateResponse("artist_details.html", {
         "request": request,
         "artist_info": artist_info_dict,
+        "albums": albums,
+        "most_played_track": most_played_track_name,
+        "total_artist_plays": total_artist_plays,
+        "unique_artist_listeners": unique_artist_listeners,
+        "top_listeners": top_listeners,
+        "user_stats": user_stats,
     })
 
 # /genres/{genre_name}	

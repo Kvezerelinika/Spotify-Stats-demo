@@ -51,26 +51,74 @@
         }
     </style>
 </head>
-<body>
+<body style="background:#121212;color:white;font-family:Arial,sans-serif;max-width:900px;margin:auto;padding:20px;">
 
-    <div class="artist-header">
-        <img src="{{ artist_info.image_url or '/static/default-artist.png' }}" alt="Artist Image" class="artist-image">
-        <div class="artist-meta">
+    <!-- Artist Header -->
+    <div class="artist-header" style="display:flex;gap:20px;align-items:center;">
+        <img src="{{ artist_info.image_url or '/static/default-artist.png' }}" 
+             alt="Artist" style="width:220px;height:220px;border-radius:50%;object-fit:cover;">
+        <div>
             <h1>{{ artist_info.artist_name }}</h1>
-            <p><strong>Popularity:</strong> {{ artist_info.popularity }}</p>
-            <div class="genres">
-                <strong>Genres:</strong>
-                {% if artist_info.genres %}
-                    {{ artist_info.genres | join(', ') }}
-                {% else %}
-                    Unknown
-                {% endif %}
-            </div>
-            <div class="spotify-link">
-                <a href="{{ artist_info.spotify_url }}" target="_blank">View on Spotify</a>
-            </div>
+            <p><strong>Popularity:</strong> {{ artist_info.popularity or "N/A" }}</p>
+            <p><strong>Genres:</strong> {{ artist_info.genres|join(', ') if artist_info.genres else "Unknown" }}</p>
+            <a href="{{ artist_info.spotify_url }}" target="_blank" 
+               style="background:#1db954;color:#fff;padding:10px 16px;border-radius:6px;font-weight:bold;display:inline-block;margin-top:10px;">
+               View on Spotify
+            </a>
         </div>
     </div>
+
+    <hr>
+
+    <!-- Artist Stats -->
+    <h2>Artist Stats</h2>
+    <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+        <div class="stat-card"><h4>Total Plays</h4><p>{{ total_artist_plays }}</p></div>
+        <div class="stat-card"><h4>Unique Listeners</h4><p>{{ unique_artist_listeners }}</p></div>
+        <div class="stat-card"><h4>Most Played Track</h4><p>{{ most_played_track }}</p></div>
+    </div>
+
+    <!-- Albums -->
+    <h3>Albums</h3>
+    <div style="display:flex;gap:15px;overflow-x:auto;">
+        {% for album in albums %}
+        <div style="min-width:150px;text-align:center;">
+            <a href="/albums/{{ album.album_id }}">
+                <img src="{{ album.image_url or '/static/default-album.png' }}" 
+                     style="width:150px;height:150px;border-radius:8px;object-fit:cover;">
+                <p>{{ album.name }}</p>
+                <small>{{ album.release_date }}</small>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Top Listeners -->
+    {% if top_listeners %}
+    <h3>Top Listeners</h3>
+    <div style="display:flex;gap:15px;overflow-x:auto;">
+        {% for listener in top_listeners %}
+        <div style="background:#222;border-radius:8px;padding:10px;min-width:120px;text-align:center;">
+            <img src="{{ listener.image_url or '/static/default-user.png' }}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
+            <p>{{ listener.display_name }}</p>
+            <p>Plays: {{ listener.total_plays }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- User Stats -->
+    {% if user_stats %}
+    <hr>
+    <h2>Your Listening Stats</h2>
+    <div class="stats-grid">
+        <div class="stat-card"><h4>Total Plays</h4><p>{{ user_stats.total_listens }}</p></div>
+        <div class="stat-card"><h4>Total Hours Listened</h4><p>{{ user_stats.total_listening_time_hours }}</p></div>
+        <div class="stat-card"><h4>First Played</h4><p>{{ user_stats.first_play.strftime('%Y-%m-%d') }}</p></div>
+        <div class="stat-card"><h4>Last Played</h4><p>{{ user_stats.last_play.strftime('%Y-%m-%d') }}</p></div>
+        <div class="stat-card"><h4>Favorite Track</h4><p>{{ user_stats.favorite_track }}</p></div>
+    </div>
+    {% endif %}
 
 </body>
 </html>
