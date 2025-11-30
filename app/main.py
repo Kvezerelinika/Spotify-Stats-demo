@@ -82,7 +82,7 @@ async def refresh_tokens_periodically():
             except Exception as e:
                 print(f"Error refreshing token for user {user.user_id}: {e}")
 
-# ✅ Session Middleware (Make sure secret_key is correctly set)
+# ✅ Session Middleware
 app.add_middleware(SessionMiddleware, secret_key="your_super_secret_key", session_cookie="spotify_session")
 
 # ✅ Setup Jinja2 Templates
@@ -90,10 +90,6 @@ templates = Jinja2Templates(directory="app/templates")
 
 # ✅ Serve static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-# ---------------------------------------
-# 🎵 1️⃣ Spotify Login & Auth Flow
-# ---------------------------------------
 
 @app.get("/")
 async def root(request: Request):
@@ -203,23 +199,17 @@ async def get_spotify_user_profile(token):
             response = await client.get(url, headers=headers)
 
             if response.status_code == 200:
-                return response.json()  # ✅ Success
+                return response.json()
 
-            elif response.status_code == 429:  # 🚨 Too Many Requests
+            elif response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", 5))  # Default wait: 5 sec
-                print(f"⚠️ 429 Too Many Requests. Retrying after {retry_after} seconds...")
-                time.sleep(retry_after)  # ⏳ Wait before retrying
+                print(f"429 Too Many Requests. Retrying after {retry_after} seconds...")
+                time.sleep(retry_after)  #Wait before retrying
                 continue  # Retry the request
 
             else:
-                print(f"❌ Error fetching user profile: {response.status_code} - {response.text}")
-                return None  # 🚨 Other errors, return None
-
-
-
-# ---------------------------------------
-# 🎵 2️⃣ Fetch & Display Spotify Data
-# ---------------------------------------
+                print(f"Error fetching user profile: {response.status_code} - {response.text}")
+                return None
 
 
 @app.get("/dashboard")
@@ -1509,35 +1499,6 @@ async def show_listening_history(request: Request, db=Depends(get_db_connection)
     })
 
 
-
-
-
-    # recent tracks artist and image_url update
-    #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
-    #track_ids = cursor.fetchall()
-    #all_tracks = get_track(token, track_ids)
-    #all_artist_id_and_image_url_into_database(all_tracks, user_id)
-
-    #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
-    #track_ids = [row[0] for row in cursor.fetchall()]  # Extract track IDs as a list
-
-    #if track_ids:  # Ensure there are tracks before calling API
-        #get_tracks(token, track_ids)  # Fetch in batches
-    #all_artist_id_and_image_url_into_database(all_tracks, user_id)  # Update DB
-
-
-    #cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
-    #track_ids = [row[0] for row in cursor.fetchall()]  # Extract track IDs as a list
-
-    #if track_ids:  # Ensure there are tracks before calling API
-        #track_data = get_track(token, track_ids)  # Fetch in batches
-        #all_artist_id_and_image_url_into_database(track_data, user_id) 
-
-
-
-
-
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1555,14 +1516,6 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     spotify_user = SpotifyUser(access_token)
     user_data = await spotify_user.store_user_info_to_database(user_profile, db)
     user_id = user_data["id"]
-
-    # recent tracks artist and image_url update
-    # cursor.execute("SELECT track_id FROM listening_history WHERE user_id = %s;", (user_id,))
-    # track_ids = "2mlNgAeIBnL78ZriXgrRHz"  # Example track ID
-    # all_tracks = get_track(token, track_ids)
-    # print("all_tracks: ", all_tracks)
-    # all_artist_id_and_image_url_into_database(all_tracks, user_id)
-
 
 
 
@@ -1621,27 +1574,4 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
     return {"message": f"Inserted {len(records)} records into database"}
     
-
-
-
-import requests
-
-def test_track_ids(token, track_ids):
-    url_template = "https://api.spotify.com/v1/tracks/{}"  # API endpoint for a single track
-
-    headers = {"Authorization": f"Bearer {token}"}
-
-    for track_id in track_ids:
-        url = url_template.format(track_id)
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            track_data = response.json()
-            artist_id = track_data.get("artists", [{}])[0].get("id", None)
-            album_image_url = track_data.get("album", {}).get("images", [{}])[0].get("url", None)
-            print(f"Track {track_id}: Artist ID: {artist_id}, Album Image: {album_image_url}")
-        else:
-            print(f"Failed to fetch track 1 {track_id}: {response.status_code} - {response.text}")
-
-
 
